@@ -68,7 +68,7 @@ class Company(Base):
     last_scraped_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    jobs = relationship("JobListing", back_populates="company")
+    jobs = relationship("JobListing", back_populates="company", cascade="all, delete-orphan")
 
 
 class JobListing(Base):

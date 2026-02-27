@@ -1,5 +1,6 @@
 """Fetches job listings from Greenhouse, AshbyHQ, and Lever public APIs."""
 
+import json
 import logging
 from datetime import datetime
 
@@ -9,7 +10,7 @@ from dateutil.parser import parse as parse_date
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.models import ATSType, Company, JobListing, JobStatus
+from app.models.models import ATSType, Company, JobListing, JobStatus, UserProfile
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +136,30 @@ async def fetch_lever_jobs(client: httpx.AsyncClient, token: str) -> list[dict]:
     return results
 
 
+async def _get_target_titles(db: AsyncSession) -> list[str]:
+    """Load target job titles from user profile preferences (lowercased)."""
+    result = await db.execute(select(UserProfile).limit(1))
+    profile = result.scalar_one_or_none()
+    if not profile or not profile.preferences:
+        return []
+    try:
+        prefs = json.loads(profile.preferences) if isinstance(profile.preferences, str) else profile.preferences
+        titles = prefs.get("titles", [])
+        if isinstance(titles, str):
+            titles = [t.strip() for t in titles.split(",") if t.strip()]
+        return [t.lower() for t in titles]
+    except (json.JSONDecodeError, AttributeError):
+        return []
+
+
+def _matches_target_titles(job_title: str, target_titles: list[str]) -> bool:
+    """Check if a job title contains any of the target titles (case-insensitive)."""
+    if not target_titles:
+        return True  # No filter configured, accept all
+    job_lower = job_title.lower()
+    return any(target in job_lower for target in target_titles)
+
+
 async def fetch_jobs_for_company(db: AsyncSession, company: Company) -> int:
     """Fetch and store new jobs for a single company. Returns count of new jobs."""
     async with httpx.AsyncClient() as client:
@@ -154,8 +179,17 @@ async def fetch_jobs_for_company(db: AsyncSession, company: Company) -> int:
     )
     existing_ids = {row[0] for row in result.fetchall()}
 
+    # Load target titles for filtering
+    target_titles = await _get_target_titles(db)
+
     new_count = 0
+    skipped = 0
     for job_data in raw_jobs:
+        if job_data["external_id"] in existing_ids:
+            continue
+        if not _matches_target_titles(job_data["title"], target_titles):
+            skipped += 1
+            continue
         if job_data["external_id"] in existing_ids:
             continue
         listing = JobListing(
@@ -177,7 +211,7 @@ async def fetch_jobs_for_company(db: AsyncSession, company: Company) -> int:
 
     company.last_scraped_at = datetime.utcnow()
     await db.commit()
-    logger.info(f"Fetched {new_count} new jobs from {company.name} ({company.ats_type.value})")
+    logger.info(f"Fetched {new_count} new jobs from {company.name} ({company.ats_type.value}), skipped {skipped} non-matching titles")
     return new_count
 
 
