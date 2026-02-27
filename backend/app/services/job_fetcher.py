@@ -1,4 +1,4 @@
-"""Fetches job listings from Greenhouse and AshbyHQ public APIs."""
+"""Fetches job listings from Greenhouse, AshbyHQ, and Lever public APIs."""
 
 import logging
 from datetime import datetime
@@ -15,14 +15,21 @@ logger = logging.getLogger(__name__)
 
 GREENHOUSE_BASE = "https://boards-api.greenhouse.io/v1/boards"
 ASHBY_BASE = "https://api.ashbyhq.com/posting-api/job-board"
+LEVER_BASE = "https://api.lever.co/v0/postings"
 
 
 def _safe_parse_date(value) -> datetime | None:
-    """Parse a date string into a datetime object, or return None."""
+    """Parse a date string or Unix timestamp (ms) into a datetime object, or return None."""
     if value is None:
         return None
     if isinstance(value, datetime):
         return value
+    # Handle Unix timestamps in milliseconds (Lever uses these)
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.utcfromtimestamp(value / 1000 if value > 1e12 else value)
+        except (ValueError, OSError):
+            return None
     try:
         return parse_date(str(value))
     except (ValueError, TypeError):
@@ -94,6 +101,40 @@ async def fetch_ashby_jobs(client: httpx.AsyncClient, token: str) -> list[dict]:
     return results
 
 
+async def fetch_lever_jobs(client: httpx.AsyncClient, token: str) -> list[dict]:
+    """Fetch all jobs from a Lever postings board."""
+    url = f"{LEVER_BASE}/{token}"
+    resp = await client.get(url, timeout=30)
+    resp.raise_for_status()
+    jobs = resp.json()  # Lever returns a JSON array directly
+    if not isinstance(jobs, list):
+        logger.warning(f"Lever returned non-list response for {token}: {type(jobs)}")
+        return []
+    results = []
+    for j in jobs:
+        desc_html = j.get("descriptionPlain", "") or j.get("description", "")
+        desc_html_raw = j.get("description", "")
+        desc_text = BeautifulSoup(desc_html_raw, "html.parser").get_text(separator="\n").strip() if desc_html_raw else desc_html
+        categories = j.get("categories", {})
+        loc = categories.get("location", "") or ""
+        team = categories.get("team", "") or ""
+        commitment = categories.get("commitment", "") or ""
+        results.append(
+            {
+                "external_id": str(j["id"]),
+                "title": j.get("text", ""),
+                "location": loc,
+                "department": team,
+                "description_html": desc_html_raw,
+                "description_text": desc_text,
+                "url": j.get("hostedUrl", j.get("applyUrl", "")),
+                "compensation": commitment,
+                "posted_at": _safe_parse_date(j.get("createdAt")),
+            }
+        )
+    return results
+
+
 async def fetch_jobs_for_company(db: AsyncSession, company: Company) -> int:
     """Fetch and store new jobs for a single company. Returns count of new jobs."""
     async with httpx.AsyncClient() as client:
@@ -101,6 +142,8 @@ async def fetch_jobs_for_company(db: AsyncSession, company: Company) -> int:
             raw_jobs = await fetch_greenhouse_jobs(client, company.board_token)
         elif company.ats_type == ATSType.ASHBY:
             raw_jobs = await fetch_ashby_jobs(client, company.board_token)
+        elif company.ats_type == ATSType.LEVER:
+            raw_jobs = await fetch_lever_jobs(client, company.board_token)
         else:
             logger.warning(f"Unknown ATS type: {company.ats_type}")
             return 0

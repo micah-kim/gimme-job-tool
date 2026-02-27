@@ -38,6 +38,7 @@ export default function CompaniesPage() {
             <select value={form.ats_type} onChange={e => setForm({ ...form, ats_type: e.target.value })}>
               <option value="greenhouse">Greenhouse</option>
               <option value="ashby">AshbyHQ</option>
+              <option value="lever">Lever</option>
             </select>
           </div>
           <div className="form-group" style={{ flex: 1, minWidth: 150 }}>

@@ -138,6 +138,64 @@ async def _fill_ashby_form(
         pass
 
 
+async def _fill_lever_form(
+    page: Page,
+    profile: UserProfile,
+    resume_path: str,
+    cover_letter: str,
+    ai_client: AsyncAzureOpenAI,
+) -> None:
+    """Fill out a Lever application form."""
+    # Lever uses a single "Full name" field
+    field_map = [
+        ("input[name='name']", f"{profile.first_name} {profile.last_name}"),
+        ("input[name='email']", profile.email),
+        ("input[name='phone']", profile.phone),
+        ("input[name='org']", ""),  # Current company — filled if available
+        ("input[name='urls[LinkedIn]']", profile.linkedin_url),
+        ("input[name='urls[GitHub]']", ""),
+        ("input[name='urls[Portfolio]']", ""),
+        ("input[name='urls[Other]']", ""),
+    ]
+    for selector, value in field_map:
+        try:
+            el = page.locator(selector)
+            if await el.count() > 0 and value:
+                await el.fill(value)
+        except Exception:
+            pass
+
+    # Resume upload
+    try:
+        file_input = page.locator("input[type='file'][name='resume']").first
+        if await file_input.count() > 0 and resume_path:
+            await file_input.set_input_files(resume_path)
+    except Exception as e:
+        logger.warning(f"Could not upload resume (Lever): {e}")
+
+    # Cover letter / additional info textarea
+    try:
+        comments_el = page.locator("textarea[name='comments']").first
+        if await comments_el.count() > 0 and cover_letter:
+            await comments_el.fill(cover_letter)
+    except Exception:
+        pass
+
+    # Handle custom questions (Lever uses div.custom-question containers)
+    try:
+        custom_questions = await page.locator(".custom-question").all()
+        for q in custom_questions:
+            label_text = await q.locator("label").first.text_content()
+            if not label_text:
+                continue
+            text_input = q.locator("input[type='text'], textarea").first
+            if await text_input.count() > 0:
+                answer = await _answer_custom_question(ai_client, label_text.strip(), profile)
+                await text_input.fill(answer)
+    except Exception as e:
+        logger.warning(f"Error handling Lever custom fields: {e}")
+
+
 async def _fill_generic_form(
     page: Page,
     profile: UserProfile,
@@ -211,6 +269,8 @@ async def apply_to_job(db: AsyncSession, job: JobListing) -> ApplicationLog:
                 await _fill_greenhouse_form(page, profile, resume_path, cover_letter, ai_client)
             elif "ashby" in url_lower or "jobs.ashbyhq.com" in url_lower:
                 await _fill_ashby_form(page, profile, resume_path, cover_letter, ai_client)
+            elif "lever.co" in url_lower or "jobs.lever.co" in url_lower:
+                await _fill_lever_form(page, profile, resume_path, cover_letter, ai_client)
             else:
                 await _fill_generic_form(page, profile, resume_path, cover_letter, ai_client)
 

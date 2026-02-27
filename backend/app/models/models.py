@@ -22,6 +22,7 @@ class Base(DeclarativeBase):
 class ATSType(str, enum.Enum):
     GREENHOUSE = "greenhouse"
     ASHBY = "ashby"
+    LEVER = "lever"
 
 
 class JobStatus(str, enum.Enum):
