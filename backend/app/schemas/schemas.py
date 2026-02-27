@@ -15,6 +15,38 @@ class UserPreferences(BaseModel):
     deal_breakers: list[str] = []
 
 
+class ApplicationAnswers(BaseModel):
+    # Work authorization
+    authorized_to_work: str = ""  # "Yes" / "No"
+    sponsorship_needed: str = ""  # "Yes" / "No"
+    # Education
+    school_name: str = ""
+    degree: str = ""  # "Bachelor's", "Master's", "PhD", "Associate's", "High School", etc.
+    field_of_study: str = ""
+    graduation_year: str = ""
+    # Work details
+    years_of_experience: str = ""
+    current_company: str = ""
+    current_title: str = ""
+    desired_salary: str = ""
+    salary_currency: str = "USD"
+    willing_to_relocate: str = ""  # "Yes" / "No"
+    available_start_date: str = ""
+    # Online presence
+    website_url: str = ""
+    github_url: str = ""
+    portfolio_url: str = ""
+    # EEO / Demographics (voluntary self-identification)
+    gender: str = ""  # "Male", "Female", "Non-binary", "Prefer not to say"
+    race_ethnicity: str = ""  # "White", "Black or African American", "Asian", "Hispanic or Latino", "Native American or Alaska Native", "Native Hawaiian or Other Pacific Islander", "Two or More Races", "Prefer not to say"
+    veteran_status: str = ""  # "I am a veteran", "I am not a veteran", "Prefer not to say"
+    disability_status: str = ""  # "Yes, I have a disability", "No, I do not have a disability", "Prefer not to say"
+    # Misc common questions
+    over_18: str = ""  # "Yes" / "No"
+    how_did_you_hear: str = ""
+    requires_accommodation: str = ""  # "Yes" / "No"
+
+
 class UserProfileCreate(BaseModel):
     first_name: str
     last_name: str
@@ -22,6 +54,7 @@ class UserProfileCreate(BaseModel):
     phone: str = ""
     linkedin_url: str = ""
     preferences: UserPreferences = UserPreferences()
+    application_answers: ApplicationAnswers = ApplicationAnswers()
 
 
 class UserProfileOut(UserProfileCreate):

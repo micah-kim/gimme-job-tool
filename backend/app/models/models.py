@@ -51,6 +51,8 @@ class UserProfile(Base):
     base_resume_path = Column(String, default="")
     # JSON string: {"titles": [...], "locations": [...], "min_yoe": 0, "max_yoe": 10, "keywords": [...], "deal_breakers": [...]}
     preferences = Column(Text, default="{}")
+    # JSON string for pre-filled application answers (EEO, education, work auth, etc.)
+    application_answers = Column(Text, default="{}")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
