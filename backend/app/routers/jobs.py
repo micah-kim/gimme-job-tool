@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.models import Company, JobListing, JobScore
+from app.models.models import Company, JobListing, JobScore, JobStatus
 from app.schemas.schemas import CompanyCreate, CompanyOut, JobListingOut, JobScoreOut
 from app.services.job_fetcher import fetch_all_jobs, fetch_jobs_for_company
 
@@ -55,7 +55,19 @@ async def list_jobs(
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(JobListing).order_by(JobListing.fetched_at.desc())
+    query = select(
+        JobListing.id,
+        JobListing.company_id,
+        JobListing.external_id,
+        JobListing.title,
+        JobListing.location,
+        JobListing.department,
+        JobListing.url,
+        JobListing.compensation,
+        JobListing.posted_at,
+        JobListing.fetched_at,
+        JobListing.status,
+    ).order_by(JobListing.fetched_at.desc())
     if status:
         query = query.where(JobListing.status == status)
     if title:
@@ -64,15 +76,49 @@ async def list_jobs(
         query = query.where(JobListing.location.ilike(f"%{location}%"))
     query = query.offset(offset).limit(limit)
     result = await db.execute(query)
-    return result.scalars().all()
+    rows = result.all()
+    return [
+        JobListingOut(
+            id=r.id,
+            company_id=r.company_id,
+            external_id=r.external_id,
+            title=r.title,
+            location=r.location or "",
+            department=r.department or "",
+            description_text="",
+            url=r.url or "",
+            compensation=r.compensation or "",
+            posted_at=r.posted_at,
+            fetched_at=r.fetched_at,
+            status=r.status.value if hasattr(r.status, "value") else str(r.status),
+        )
+        for r in rows
+    ]
 
 
 @router.get("/jobs/matched", response_model=list[JobListingOut])
 async def list_matched_jobs(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(JobListing).where(JobListing.status == "matched").order_by(JobListing.fetched_at.desc())
+        select(JobListing).where(JobListing.status == JobStatus.MATCHED).order_by(JobListing.fetched_at.desc())
     )
-    return result.scalars().all()
+    jobs = result.scalars().all()
+    return [
+        JobListingOut(
+            id=j.id,
+            company_id=j.company_id,
+            external_id=j.external_id,
+            title=j.title,
+            location=j.location or "",
+            department=j.department or "",
+            description_text="",
+            url=j.url or "",
+            compensation=j.compensation or "",
+            posted_at=j.posted_at,
+            fetched_at=j.fetched_at,
+            status=j.status.value if hasattr(j.status, "value") else str(j.status),
+        )
+        for j in jobs
+    ]
 
 
 @router.get("/jobs/{job_id}", response_model=JobListingOut)
@@ -81,7 +127,20 @@ async def get_job(job_id: int, db: AsyncSession = Depends(get_db)):
     job = result.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    return JobListingOut(
+        id=job.id,
+        company_id=job.company_id,
+        external_id=job.external_id,
+        title=job.title,
+        location=job.location or "",
+        department=job.department or "",
+        description_text=job.description_text or "",
+        url=job.url or "",
+        compensation=job.compensation or "",
+        posted_at=job.posted_at,
+        fetched_at=job.fetched_at,
+        status=job.status.value if hasattr(job.status, "value") else str(job.status),
+    )
 
 
 @router.get("/jobs/{job_id}/score", response_model=JobScoreOut | None)

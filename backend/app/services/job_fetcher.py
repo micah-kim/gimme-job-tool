@@ -5,6 +5,7 @@ from datetime import datetime
 
 import httpx
 from bs4 import BeautifulSoup
+from dateutil.parser import parse as parse_date
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +15,18 @@ logger = logging.getLogger(__name__)
 
 GREENHOUSE_BASE = "https://boards-api.greenhouse.io/v1/boards"
 ASHBY_BASE = "https://api.ashbyhq.com/posting-api/job-board"
+
+
+def _safe_parse_date(value) -> datetime | None:
+    """Parse a date string into a datetime object, or return None."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return parse_date(str(value))
+    except (ValueError, TypeError):
+        return None
 
 
 async def fetch_greenhouse_jobs(client: httpx.AsyncClient, token: str) -> list[dict]:
@@ -41,7 +54,7 @@ async def fetch_greenhouse_jobs(client: httpx.AsyncClient, token: str) -> list[d
                 "description_text": desc_text,
                 "url": j.get("absolute_url", ""),
                 "compensation": "",
-                "posted_at": j.get("updated_at"),
+                "posted_at": _safe_parse_date(j.get("updated_at")),
             }
         )
     return results
@@ -75,7 +88,7 @@ async def fetch_ashby_jobs(client: httpx.AsyncClient, token: str) -> list[dict]:
                 "description_text": desc_text,
                 "url": j.get("jobUrl", j.get("hostedUrl", "")),
                 "compensation": comp_str,
-                "posted_at": j.get("publishedAt"),
+                "posted_at": _safe_parse_date(j.get("publishedAt")),
             }
         )
     return results

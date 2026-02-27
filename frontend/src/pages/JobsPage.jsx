@@ -7,10 +7,14 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(false);
 
   const load = async () => {
-    const params = {};
-    if (statusFilter) params.status = statusFilter;
-    const data = await getJobs(params);
-    setJobs(data);
+    try {
+      const params = {};
+      if (statusFilter) params.status = statusFilter;
+      const data = await getJobs(params);
+      setJobs(data);
+    } catch (e) {
+      console.error('Failed to load jobs:', e);
+    }
   };
 
   useEffect(() => { load(); }, [statusFilter]);
