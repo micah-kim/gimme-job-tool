@@ -46,6 +46,10 @@ class ApplicationAnswers(BaseModel):
     over_18: str = ""  # "Yes" / "No"
     how_did_you_hear: str = ""
     requires_accommodation: str = ""  # "Yes" / "No"
+    # Additional common required questions
+    non_compete: str = ""  # "Yes" / "No" — non-compete/non-solicitation agreements
+    previously_worked_here: str = ""  # "Yes" / "No" — have you worked at this company before
+    location_city: str = ""  # preferred city for the Location (City) field
 
 
 class UserProfileCreate(BaseModel):

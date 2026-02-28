@@ -11,6 +11,7 @@ const emptyAnswers = {
   available_start_date: '', website_url: '', github_url: '', portfolio_url: '',
   gender: '', race_ethnicity: '', veteran_status: '', disability_status: '',
   over_18: '', how_did_you_hear: '', requires_accommodation: '',
+  non_compete: '', previously_worked_here: '', location_city: '',
 };
 
 // Convert arrays to comma strings for editing, and back for saving
@@ -226,6 +227,17 @@ export default function ProfilePage() {
             <label>Available Start Date</label>
             <input type="date" value={form.application_answers.available_start_date}
               onChange={e => updateAnswer('available_start_date', e.target.value)} />
+          </div>
+          <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+            <SelectField label="Subject to non-compete/non-solicitation agreement?" value={form.application_answers.non_compete}
+              onChange={v => updateAnswer('non_compete', v)} options={['Yes', 'No']} />
+            <SelectField label="Previously worked at the company?" value={form.application_answers.previously_worked_here}
+              onChange={v => updateAnswer('previously_worked_here', v)} options={['Yes', 'No']} />
+          </div>
+          <div className="form-group">
+            <label>Location (City) — used for application forms</label>
+            <input value={form.application_answers.location_city}
+              onChange={e => updateAnswer('location_city', e.target.value)} placeholder="San Francisco, CA" />
           </div>
         </div>
 
