@@ -136,28 +136,43 @@ async def fetch_lever_jobs(client: httpx.AsyncClient, token: str) -> list[dict]:
     return results
 
 
-async def _get_target_titles(db: AsyncSession) -> list[str]:
-    """Load target job titles from user profile preferences (lowercased)."""
+async def _get_filter_criteria(db: AsyncSession) -> tuple[list[str], list[str], list[str]]:
+    """Load target titles, excluded titles, and locations from user profile preferences (all lowercased)."""
     result = await db.execute(select(UserProfile).limit(1))
     profile = result.scalar_one_or_none()
     if not profile or not profile.preferences:
-        return []
+        return [], [], []
     try:
         prefs = json.loads(profile.preferences) if isinstance(profile.preferences, str) else profile.preferences
-        titles = prefs.get("titles", [])
-        if isinstance(titles, str):
-            titles = [t.strip() for t in titles.split(",") if t.strip()]
-        return [t.lower() for t in titles]
+
+        def _parse_list(val):
+            if isinstance(val, str):
+                return [t.strip().lower() for t in val.split(",") if t.strip()]
+            return [t.lower() for t in (val or [])]
+
+        return _parse_list(prefs.get("titles", [])), _parse_list(prefs.get("excluded_titles", [])), _parse_list(prefs.get("locations", []))
     except (json.JSONDecodeError, AttributeError):
-        return []
+        return [], [], []
 
 
-def _matches_target_titles(job_title: str, target_titles: list[str]) -> bool:
-    """Check if a job title contains any of the target titles (case-insensitive)."""
-    if not target_titles:
-        return True  # No filter configured, accept all
+def _matches_filters(job_title: str, job_location: str, target_titles: list[str], excluded_titles: list[str], locations: list[str]) -> bool:
+    """Check if a job passes all filters (case-insensitive)."""
     job_lower = job_title.lower()
-    return any(target in job_lower for target in target_titles)
+    loc_lower = (job_location or "").lower()
+
+    # Must match at least one target title (if any configured)
+    if target_titles and not any(target in job_lower for target in target_titles):
+        return False
+
+    # Must not match any excluded title
+    if excluded_titles and any(excl in job_lower for excl in excluded_titles):
+        return False
+
+    # Must match at least one location (if any configured)
+    if locations and not any(loc in loc_lower for loc in locations):
+        return False
+
+    return True
 
 
 async def fetch_jobs_for_company(db: AsyncSession, company: Company) -> int:
@@ -179,15 +194,15 @@ async def fetch_jobs_for_company(db: AsyncSession, company: Company) -> int:
     )
     existing_ids = {row[0] for row in result.fetchall()}
 
-    # Load target titles for filtering
-    target_titles = await _get_target_titles(db)
+    # Load filter criteria from profile
+    target_titles, excluded_titles, locations = await _get_filter_criteria(db)
 
     new_count = 0
     skipped = 0
     for job_data in raw_jobs:
         if job_data["external_id"] in existing_ids:
             continue
-        if not _matches_target_titles(job_data["title"], target_titles):
+        if not _matches_filters(job_data["title"], job_data["location"], target_titles, excluded_titles, locations):
             skipped += 1
             continue
         if job_data["external_id"] in existing_ids:

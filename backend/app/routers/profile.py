@@ -107,6 +107,9 @@ async def upload_resume(file: UploadFile = File(...), db: AsyncSession = Depends
     if not profile:
         raise HTTPException(status_code=404, detail="Create a profile first")
 
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted")
+
     os.makedirs(UPLOADS_DIR, exist_ok=True)
     filepath = os.path.join(UPLOADS_DIR, file.filename)
     with open(filepath, "wb") as f:

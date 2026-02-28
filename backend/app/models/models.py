@@ -90,7 +90,6 @@ class JobListing(Base):
 
     company = relationship("Company", back_populates="jobs")
     score = relationship("JobScore", uselist=False, back_populates="job")
-    tailored_resume = relationship("TailoredResume", uselist=False, back_populates="job")
     application_log = relationship("ApplicationLog", uselist=False, back_populates="job")
 
 
@@ -106,19 +105,6 @@ class JobScore(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     job = relationship("JobListing", back_populates="score")
-
-
-class TailoredResume(Base):
-    __tablename__ = "tailored_resume"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    job_id = Column(Integer, ForeignKey("job_listing.id"), nullable=False, unique=True)
-    resume_content = Column(Text, default="")
-    resume_pdf_path = Column(String, default="")
-    cover_letter = Column(Text, default="")
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    job = relationship("JobListing", back_populates="tailored_resume")
 
 
 class ApplicationLog(Base):

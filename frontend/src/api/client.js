@@ -40,13 +40,8 @@ export const uploadResume = async (file) => {
 // Pipeline
 export const runPipeline = (opts = {}) => request('/pipeline/run', { method: 'POST', body: JSON.stringify(opts) });
 export const triggerFetch = () => request('/jobs/fetch', { method: 'POST' });
-export const triggerAnalyze = () => request('/jobs/analyze', { method: 'POST' });
-export const triggerTailor = () => request('/jobs/tailor', { method: 'POST' });
 export const applyToJob = (id) => request(`/jobs/${id}/apply`, { method: 'POST' });
 export const applyAll = () => request('/apply/run', { method: 'POST' });
 
 // Applications
 export const getApplications = () => request('/applications');
-
-// Tailored Resume
-export const getTailoredResume = (jobId) => request(`/jobs/${jobId}/resume`);

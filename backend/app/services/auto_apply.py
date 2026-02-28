@@ -16,7 +16,6 @@ from app.models.models import (
     ApplicationStatus,
     JobListing,
     JobStatus,
-    TailoredResume,
     UserProfile,
 )
 
@@ -232,18 +231,13 @@ async def apply_to_job(db: AsyncSession, job: JobListing) -> ApplicationLog:
     """Apply to a single job using browser automation."""
     os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
 
-    # Get profile and tailored resume
+    # Get profile
     result = await db.execute(select(UserProfile).limit(1))
     profile = result.scalar_one_or_none()
     if not profile:
         raise ValueError("No user profile configured")
 
-    result = await db.execute(
-        select(TailoredResume).where(TailoredResume.job_id == job.id)
-    )
-    tailored = result.scalar_one_or_none()
-    resume_path = tailored.resume_pdf_path if tailored else profile.base_resume_path
-    cover_letter = tailored.cover_letter if tailored else ""
+    resume_path = profile.base_resume_path or ""
 
     ai_client = AsyncAzureOpenAI(
         api_key=settings.azure_openai_api_key,
@@ -265,6 +259,7 @@ async def apply_to_job(db: AsyncSession, job: JobListing) -> ApplicationLog:
 
             # Detect ATS type from URL and fill accordingly
             url_lower = job.url.lower()
+            cover_letter = ""
             if "greenhouse" in url_lower or "boards.greenhouse.io" in url_lower:
                 await _fill_greenhouse_form(page, profile, resume_path, cover_letter, ai_client)
             elif "ashby" in url_lower or "jobs.ashbyhq.com" in url_lower:
@@ -306,28 +301,39 @@ async def apply_to_job(db: AsyncSession, job: JobListing) -> ApplicationLog:
     return app_log
 
 
-async def apply_to_matched_jobs(db: AsyncSession, max_applications: int | None = None) -> int:
-    """Apply to all matched jobs with tailored resumes. Returns count of applications."""
+async def apply_to_all_jobs(
+    db: AsyncSession, max_applications: int | None = None
+) -> tuple[int, int, int]:
+    """Apply to all eligible jobs (NEW or MATCHED, not already APPLIED/FAILED).
+    Returns (submitted, failed, skipped) counts."""
     limit = max_applications or settings.max_applications_per_run
 
+    # Get jobs that haven't been applied to or failed
     result = await db.execute(
         select(JobListing)
-        .where(JobListing.status == JobStatus.MATCHED)
-        .join(TailoredResume)
-        .outerjoin(ApplicationLog)
-        .where(ApplicationLog.id.is_(None))
+        .where(JobListing.status.in_([JobStatus.NEW, JobStatus.MATCHED]))
+        .order_by(JobListing.fetched_at.desc())
         .limit(limit)
     )
     jobs = result.scalars().all()
     if not jobs:
-        logger.info("No matched jobs to apply to")
-        return 0
+        logger.info("No eligible jobs to apply to")
+        return 0, 0, 0
 
-    applied = 0
+    submitted = 0
+    failed = 0
     for job in jobs:
         log = await apply_to_job(db, job)
         if log.status == ApplicationStatus.SUBMITTED:
-            applied += 1
+            submitted += 1
+        else:
+            failed += 1
 
-    logger.info(f"Applied to {applied}/{len(jobs)} jobs")
-    return applied
+    skipped_result = await db.execute(
+        select(JobListing)
+        .where(JobListing.status.in_([JobStatus.APPLIED, JobStatus.FAILED]))
+    )
+    skipped = len(skipped_result.scalars().all())
+
+    logger.info(f"Applied to {submitted}/{len(jobs)} jobs, {failed} failed, {skipped} skipped")
+    return submitted, failed, skipped

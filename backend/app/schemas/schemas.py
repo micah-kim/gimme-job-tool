@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 class UserPreferences(BaseModel):
     titles: list[str] = []
+    excluded_titles: list[str] = []
     locations: list[str] = []
     min_yoe: int = 0
     max_yoe: int = 99
@@ -118,20 +119,6 @@ class JobScoreOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ── Tailored Resume ──
-
-
-class TailoredResumeOut(BaseModel):
-    id: int
-    job_id: int
-    resume_content: str
-    resume_pdf_path: str
-    cover_letter: str
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
 # ── Application Log ──
 
 
@@ -157,9 +144,7 @@ class PipelineRunRequest(BaseModel):
 
 class PipelineRunResult(BaseModel):
     jobs_fetched: int = 0
-    jobs_analyzed: int = 0
-    jobs_matched: int = 0
-    resumes_tailored: int = 0
     applications_submitted: int = 0
     applications_failed: int = 0
+    applications_skipped: int = 0
     errors: list[str] = []

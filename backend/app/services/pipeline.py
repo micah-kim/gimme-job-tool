@@ -1,14 +1,12 @@
-"""Pipeline orchestrator — runs the full fetch → analyze → tailor → apply pipeline."""
+"""Pipeline orchestrator — runs the full fetch → apply pipeline."""
 
 import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.schemas import PipelineRunResult
-from app.services.ai_analyzer import analyze_new_jobs
-from app.services.auto_apply import apply_to_matched_jobs
+from app.services.auto_apply import apply_to_all_jobs
 from app.services.job_fetcher import fetch_all_jobs
-from app.services.resume_tailor import tailor_resumes_for_matched_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +16,9 @@ async def run_pipeline(
     dry_run: bool | None = None,
     max_applications: int | None = None,
 ) -> PipelineRunResult:
-    """Execute the full pipeline end-to-end."""
+    """Execute the full pipeline: fetch jobs → apply to eligible ones."""
     from app.core.config import settings
 
-    # Override dry_run if specified
     original_dry_run = settings.dry_run
     if dry_run is not None:
         settings.dry_run = dry_run
@@ -29,21 +26,16 @@ async def run_pipeline(
     result = PipelineRunResult()
 
     try:
-        # Step 1: Fetch new jobs
-        logger.info("Pipeline step 1/4: Fetching jobs...")
+        # Step 1: Fetch new jobs from all tracked companies
+        logger.info("Pipeline step 1/2: Fetching jobs...")
         result.jobs_fetched = await fetch_all_jobs(db)
 
-        # Step 2: Analyze new jobs with AI
-        logger.info("Pipeline step 2/4: Analyzing jobs...")
-        result.jobs_analyzed = await analyze_new_jobs(db)
-
-        # Step 3: Tailor resumes for matched jobs
-        logger.info("Pipeline step 3/4: Tailoring resumes...")
-        result.resumes_tailored = await tailor_resumes_for_matched_jobs(db)
-
-        # Step 4: Apply to matched jobs
-        logger.info("Pipeline step 4/4: Applying to jobs...")
-        result.applications_submitted = await apply_to_matched_jobs(db, max_applications)
+        # Step 2: Apply to all eligible jobs (skips APPLIED/FAILED)
+        logger.info("Pipeline step 2/2: Applying to jobs...")
+        submitted, failed, skipped = await apply_to_all_jobs(db, max_applications)
+        result.applications_submitted = submitted
+        result.applications_failed = failed
+        result.applications_skipped = skipped
 
     except Exception as e:
         logger.error(f"Pipeline error: {e}")
@@ -52,7 +44,7 @@ async def run_pipeline(
         settings.dry_run = original_dry_run
 
     logger.info(
-        f"Pipeline complete: {result.jobs_fetched} fetched, {result.jobs_analyzed} analyzed, "
-        f"{result.resumes_tailored} tailored, {result.applications_submitted} applied"
+        f"Pipeline complete: {result.jobs_fetched} fetched, {result.applications_submitted} applied, "
+        f"{result.applications_failed} failed, {result.applications_skipped} skipped"
     )
     return result

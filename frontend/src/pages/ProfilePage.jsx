@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getProfile, saveProfile, uploadResume } from '../api/client';
 
-const emptyPrefs = { titles: '', locations: '', min_yoe: 0, max_yoe: 99, keywords: '', deal_breakers: '' };
+const emptyPrefs = { titles: '', excluded_titles: '', locations: '', min_yoe: 0, max_yoe: 99, keywords: '', deal_breakers: '' };
 
 const emptyAnswers = {
   authorized_to_work: '', sponsorship_needed: '',
@@ -48,6 +48,7 @@ export default function ProfilePage() {
           email: p.email, phone: p.phone || '', linkedin_url: p.linkedin_url || '',
           preferences: {
             titles: arrToStr(prefs.titles),
+            excluded_titles: arrToStr(prefs.excluded_titles),
             locations: arrToStr(prefs.locations),
             min_yoe: prefs.min_yoe || 0,
             max_yoe: prefs.max_yoe || 99,
@@ -67,6 +68,7 @@ export default function ProfilePage() {
       ...form,
       preferences: {
         titles: strToArr(form.preferences.titles),
+        excluded_titles: strToArr(form.preferences.excluded_titles),
         locations: strToArr(form.preferences.locations),
         min_yoe: form.preferences.min_yoe,
         max_yoe: form.preferences.max_yoe,
@@ -129,8 +131,8 @@ export default function ProfilePage() {
             <input value={form.linkedin_url} onChange={e => setForm({ ...form, linkedin_url: e.target.value })} placeholder="https://linkedin.com/in/yourname" />
           </div>
           <div className="form-group">
-            <label>Base Resume (DOCX or TXT)</label>
-            <input type="file" accept=".docx,.txt,.pdf" onChange={handleResume} />
+            <label>Resume (PDF only)</label>
+            <input type="file" accept=".pdf" onChange={handleResume} />
             {profile?.base_resume_path && <span className="text-sm text-muted">Current: {profile.base_resume_path}</span>}
           </div>
         </div>
@@ -145,6 +147,14 @@ export default function ProfilePage() {
               value={form.preferences.titles}
               onChange={e => updatePref('titles', e.target.value)}
               placeholder="Software Engineer, Backend Developer, Full Stack Engineer"
+            />
+          </div>
+          <div className="form-group">
+            <label>Exclude Titles Containing</label>
+            <input
+              value={form.preferences.excluded_titles}
+              onChange={e => updatePref('excluded_titles', e.target.value)}
+              placeholder="Staff, Senior, Principal, Manager"
             />
           </div>
           <div className="form-group">
