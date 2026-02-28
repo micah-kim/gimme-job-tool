@@ -4,27 +4,48 @@ import { getCompanies, addCompany, deleteCompany } from '../api/client';
 export default function CompaniesPage() {
   const [companies, setCompanies] = useState([]);
   const [form, setForm] = useState({ name: '', ats_type: 'greenhouse', board_token: '' });
+  const [error, setError] = useState('');
 
-  const load = async () => setCompanies(await getCompanies());
+  const load = async () => {
+    try {
+      setCompanies(await getCompanies());
+      setError('');
+    } catch (e) {
+      console.error('Failed to load companies:', e);
+      setError(e.message);
+    }
+  };
   useEffect(() => { load(); }, []);
 
   const handleAdd = async (e) => {
     e.preventDefault();
-    await addCompany(form);
-    setForm({ name: '', ats_type: 'greenhouse', board_token: '' });
-    await load();
+    try {
+      await addCompany(form);
+      setForm({ name: '', ats_type: 'greenhouse', board_token: '' });
+      await load();
+    } catch (e) {
+      console.error('Failed to add company:', e);
+      setError(e.message);
+    }
   };
 
   const handleDelete = async (id) => {
     if (confirm('Remove this company?')) {
-      await deleteCompany(id);
-      await load();
+      try {
+        await deleteCompany(id);
+        await load();
+      } catch (e) {
+        console.error('Failed to delete company:', e);
+        setError(e.message);
+      }
     }
   };
 
   return (
     <div>
       <h2 className="mb-2">Tracked Companies</h2>
+
+      {error && <div className="card mb-2" style={{ borderColor: '#da3633', color: '#f85149' }}>⚠️ {error}</div>}
 
       <div className="card mb-2">
         <h3 className="mb-1">Add Company</h3>

@@ -4,7 +4,7 @@ import { getApplications } from '../api/client';
 export default function ApplicationsPage() {
   const [apps, setApps] = useState([]);
 
-  useEffect(() => { getApplications().then(setApps); }, []);
+  useEffect(() => { getApplications().then(setApps).catch(e => console.error('Failed to load applications:', e)); }, []);
 
   return (
     <div>

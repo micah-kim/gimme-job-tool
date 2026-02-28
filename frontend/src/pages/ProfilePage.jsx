@@ -37,6 +37,7 @@ export default function ProfilePage() {
     application_answers: { ...emptyAnswers },
   });
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     getProfile().then(p => {
@@ -58,35 +59,46 @@ export default function ProfilePage() {
           application_answers: { ...emptyAnswers, ...(p.application_answers || {}) },
         });
       }
-    });
+    }).catch(e => { console.error('Failed to load profile:', e); setError(e.message); });
   }, []);
 
   const handleSave = async (e) => {
     e.preventDefault();
-    // Convert comma-separated strings back to arrays for the API
-    const payload = {
-      ...form,
-      preferences: {
-        titles: strToArr(form.preferences.titles),
-        excluded_titles: strToArr(form.preferences.excluded_titles),
-        locations: strToArr(form.preferences.locations),
-        min_yoe: form.preferences.min_yoe,
-        max_yoe: form.preferences.max_yoe,
-        keywords: strToArr(form.preferences.keywords),
-        deal_breakers: strToArr(form.preferences.deal_breakers),
-      },
-    };
-    const result = await saveProfile(payload);
-    setProfile(result);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setError('');
+    try {
+      // Convert comma-separated strings back to arrays for the API
+      const payload = {
+        ...form,
+        preferences: {
+          titles: strToArr(form.preferences.titles),
+          excluded_titles: strToArr(form.preferences.excluded_titles),
+          locations: strToArr(form.preferences.locations),
+          min_yoe: form.preferences.min_yoe,
+          max_yoe: form.preferences.max_yoe,
+          keywords: strToArr(form.preferences.keywords),
+          deal_breakers: strToArr(form.preferences.deal_breakers),
+        },
+      };
+      const result = await saveProfile(payload);
+      setProfile(result);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      console.error('Failed to save profile:', e);
+      setError(e.message);
+    }
   };
 
   const handleResume = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      const res = await uploadResume(file);
-      alert(`Resume uploaded: ${res.filename}`);
+      try {
+        const res = await uploadResume(file);
+        alert(`Resume uploaded: ${res.filename}`);
+      } catch (err) {
+        console.error('Failed to upload resume:', err);
+        setError(err.message);
+      }
     }
   };
 
@@ -101,6 +113,7 @@ export default function ProfilePage() {
   return (
     <div>
       <h2 className="mb-2">Profile & Preferences</h2>
+      {error && <div className="card mb-2" style={{ borderColor: '#da3633', color: '#f85149' }}>⚠️ {error}</div>}
       <form onSubmit={handleSave}>
 
         {/* ── Personal Info ── */}
