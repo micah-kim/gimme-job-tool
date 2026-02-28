@@ -268,9 +268,11 @@ def _scan_job_form_sync(job_url: str, ats_type: str, board_token: str, external_
         try:
             if ats_type == "greenhouse":
                 apply_url = f"https://boards.greenhouse.io/embed/job_app?for={board_token}&token={external_id}"
+                logger.info(f"Scanning Greenhouse form: {apply_url}")
                 fields = _scan_greenhouse_form(page, apply_url)
             elif ats_type == "lever":
                 apply_url = job_url.rstrip('/') + '/apply'
+                logger.info(f"Scanning Lever form: {apply_url}")
                 fields = _scan_lever_form(page, apply_url)
             else:
                 # Ashby or unknown — basic scan attempt
@@ -353,7 +355,7 @@ async def scan_jobs(
 
         company = company_cache[job.company_id]
         board_token = company.board_token if company else ""
-        ats_type = company.ats_type.value if company and company.ats_type else "greenhouse"
+        ats_type = company.ats_type.value.lower() if company and company.ats_type else "greenhouse"
 
         try:
             # Run Playwright scan in thread
