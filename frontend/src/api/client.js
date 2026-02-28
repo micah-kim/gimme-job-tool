@@ -24,6 +24,7 @@ export const getJobs = (params = {}) => {
 };
 export const getMatchedJobs = () => request('/jobs/matched');
 export const getJobScore = (id) => request(`/jobs/${id}/score`);
+export const updateJobStatus = (id, status) => request(`/jobs/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
 
 // Profile
 export const getProfile = () => request('/profile');

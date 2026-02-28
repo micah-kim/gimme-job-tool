@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { getJobs, triggerFetch } from '../api/client';
+import { getJobs, triggerFetch, updateJobStatus } from '../api/client';
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState([]);
@@ -37,6 +37,24 @@ export default function JobsPage() {
     }
   };
 
+  const handleSkip = async (jobId) => {
+    try {
+      await updateJobStatus(jobId, 'skipped');
+      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'skipped' } : j));
+    } catch (e) {
+      setMessage(`❌ Failed to skip: ${e.message}`);
+    }
+  };
+
+  const handleRestore = async (jobId) => {
+    try {
+      await updateJobStatus(jobId, 'new');
+      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'new' } : j));
+    } catch (e) {
+      setMessage(`❌ Failed to restore: ${e.message}`);
+    }
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-2">
@@ -49,6 +67,7 @@ export default function JobsPage() {
             <option value="rejected">Rejected</option>
             <option value="applied">Applied</option>
             <option value="failed">Failed</option>
+            <option value="skipped">Skipped</option>
           </select>
           <button onClick={handleFetch} disabled={loading}>
             {loading ? 'Fetching...' : 'Fetch Jobs'}
@@ -65,11 +84,12 @@ export default function JobsPage() {
               <th>Department</th>
               <th>Status</th>
               <th>Fetched</th>
+              <th style={{ width: 60 }}></th>
             </tr>
           </thead>
           <tbody>
             {jobs.map(job => (
-              <tr key={job.id}>
+              <tr key={job.id} style={job.status === 'skipped' ? { opacity: 0.5 } : {}}>
                 <td>
                   <a href={job.url} target="_blank" rel="noopener noreferrer">{job.title}</a>
                 </td>
@@ -77,10 +97,26 @@ export default function JobsPage() {
                 <td>{job.department}</td>
                 <td><span className={`badge badge-${job.status}`}>{job.status}</span></td>
                 <td className="text-sm text-muted">{new Date(job.fetched_at).toLocaleDateString()}</td>
+                <td>
+                  {(job.status === 'new' || job.status === 'matched') && (
+                    <button
+                      onClick={() => handleSkip(job.id)}
+                      title="Skip this job"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: '0.2rem 0.4rem' }}
+                    >✕</button>
+                  )}
+                  {job.status === 'skipped' && (
+                    <button
+                      onClick={() => handleRestore(job.id)}
+                      title="Restore this job"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', padding: '0.2rem 0.4rem' }}
+                    >↩</button>
+                  )}
+                </td>
               </tr>
             ))}
             {jobs.length === 0 && (
-              <tr><td colSpan={5} className="text-muted" style={{ textAlign: 'center', padding: '2rem' }}>No jobs found. Add companies and fetch jobs to get started.</td></tr>
+              <tr><td colSpan={6} className="text-muted" style={{ textAlign: 'center', padding: '2rem' }}>No jobs found. Add companies and fetch jobs to get started.</td></tr>
             )}
           </tbody>
         </table>

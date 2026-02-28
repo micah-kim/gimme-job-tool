@@ -153,7 +153,110 @@ def _scan_greenhouse_form(page, apply_url: str) -> list[dict]:
     return fields
 
 
-def _scan_job_form_sync(job_url: str, board_token: str, external_id: str) -> list[dict]:
+def _scan_lever_form(page, apply_url: str) -> list[dict]:
+    """Open a Lever application form and extract all custom fields."""
+    fields = []
+    try:
+        page.goto(apply_url, wait_until="domcontentloaded", timeout=30000)
+        page.wait_for_timeout(3000)
+
+        # Lever uses .application-question for ALL questions (standard + custom + EEO)
+        # We skip standard fields (name, email, phone, resume, location, company, URLs)
+        # and focus on custom-question and EEO fields
+        SKIP_NAMES = {"name", "email", "phone", "location", "org", "resume",
+                       "urls[LinkedIn]", "urls[GitHub]", "urls[Portfolio]"}
+
+        questions = page.locator(".application-question.custom-question, .eeo-section .application-question").all()
+        logger.info(f"Found {len(questions)} custom/EEO questions on Lever form")
+
+        for q_div in questions:
+            try:
+                # Get the first label (the question label, not option labels)
+                label_el = q_div.locator("> label, > .application-label").first
+                if label_el.count() == 0:
+                    # Try getting the first direct text label
+                    label_el = q_div.locator("label").first
+                if label_el.count() == 0:
+                    continue
+
+                label_text = label_el.inner_text().strip()
+                # Clean: remove ✱ and extra whitespace
+                label_text = label_text.replace("✱", "").replace("*", "").strip()
+                label_first_line = label_text.split("\n")[0].strip()
+                if not label_first_line or len(label_first_line) < 3:
+                    continue
+
+                # Check required: ✱ in original text or required attr on input
+                original_text = label_el.inner_text()
+                is_required = "✱" in original_text or q_div.locator("[required]").count() > 0
+
+                # Determine field type and options
+                field_type = "text"
+                options = []
+
+                select_el = q_div.locator("select")
+                radio_els = q_div.locator("input[type='radio']")
+                checkbox_els = q_div.locator("input[type='checkbox']")
+                textarea_el = q_div.locator("textarea")
+                text_el = q_div.locator("input[type='text']")
+
+                if select_el.count() > 0:
+                    field_type = "select"
+                    options = select_el.first.evaluate("""el => {
+                        return Array.from(el.options)
+                            .filter(o => o.value !== '')
+                            .map(o => [o.text.trim(), o.value]);
+                    }""")
+                elif radio_els.count() > 0:
+                    field_type = "select"  # treat radio as select for Q&A purposes
+                    # Extract radio option labels
+                    option_labels = q_div.locator("li label, .radio-option label").all()
+                    for opt_label in option_labels:
+                        try:
+                            opt_text = opt_label.inner_text().strip()
+                            if opt_text:
+                                options.append([opt_text, opt_text])
+                        except Exception:
+                            pass
+                elif checkbox_els.count() > 1:
+                    field_type = "checkbox"  # multi-select checkboxes
+                    option_labels = q_div.locator("li label").all()
+                    for opt_label in option_labels:
+                        try:
+                            opt_text = opt_label.inner_text().strip()
+                            if opt_text:
+                                options.append([opt_text, opt_text])
+                        except Exception:
+                            pass
+                elif textarea_el.count() > 0:
+                    field_type = "textarea"
+                elif checkbox_els.count() == 1:
+                    field_type = "checkbox"
+
+                # Skip if this is a standard field we already handle
+                input_el = q_div.locator("input, select, textarea").first
+                if input_el.count() > 0:
+                    input_name = input_el.evaluate("el => el.name") or ""
+                    if input_name in SKIP_NAMES:
+                        continue
+
+                fields.append({
+                    "label": label_first_line,
+                    "field_type": field_type,
+                    "options": options,
+                    "is_required": is_required,
+                })
+            except Exception as e:
+                logger.warning(f"Error extracting Lever field: {e}")
+
+    except Exception as e:
+        logger.error(f"Error scanning Lever form at {apply_url}: {e}")
+        raise
+
+    return fields
+
+
+def _scan_job_form_sync(job_url: str, ats_type: str, board_token: str, external_id: str) -> list[dict]:
     """Scan a single job form in a sync Playwright context. Returns list of field dicts."""
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -163,16 +266,18 @@ def _scan_job_form_sync(job_url: str, board_token: str, external_id: str) -> lis
         page = context.new_page()
 
         try:
-            # Greenhouse
-            if board_token:
+            if ats_type == "greenhouse":
                 apply_url = f"https://boards.greenhouse.io/embed/job_app?for={board_token}&token={external_id}"
                 fields = _scan_greenhouse_form(page, apply_url)
+            elif ats_type == "lever":
+                apply_url = job_url.rstrip('/') + '/apply'
+                fields = _scan_lever_form(page, apply_url)
             else:
-                # For other ATS types, basic scan
+                # Ashby or unknown — basic scan attempt
                 page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
                 page.wait_for_timeout(3000)
                 fields = []
-                # TODO: Add Ashby/Lever scanning
+                logger.warning(f"No scanner implemented for ATS type: {ats_type}")
 
             return fields
         except Exception as e:
@@ -248,6 +353,7 @@ async def scan_jobs(
 
         company = company_cache[job.company_id]
         board_token = company.board_token if company else ""
+        ats_type = company.ats_type.value if company and company.ats_type else "greenhouse"
 
         try:
             # Run Playwright scan in thread
@@ -256,6 +362,7 @@ async def scan_jobs(
                 None,
                 _scan_job_form_sync,
                 job.url,
+                ats_type,
                 board_token,
                 job.external_id,
             )

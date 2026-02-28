@@ -31,6 +31,7 @@ class JobStatus(str, enum.Enum):
     REJECTED = "rejected"
     APPLIED = "applied"
     FAILED = "failed"
+    SKIPPED = "skipped"
 
 
 class ApplicationStatus(str, enum.Enum):

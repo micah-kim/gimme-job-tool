@@ -166,6 +166,23 @@ async def get_job_score(job_id: int, db: AsyncSession = Depends(get_db)):
     return result.scalar_one_or_none()
 
 
+@router.patch("/jobs/{job_id}/status")
+async def update_job_status(job_id: int, body: dict, db: AsyncSession = Depends(get_db)):
+    """Update a job's status (e.g., skip/dismiss a job)."""
+    new_status = body.get("status", "")
+    try:
+        status_enum = JobStatus(new_status)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}")
+    result = await db.execute(select(JobListing).where(JobListing.id == job_id))
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job.status = status_enum
+    await db.commit()
+    return {"id": job_id, "status": status_enum.value}
+
+
 # ── Fetch trigger ──
 
 
