@@ -89,8 +89,8 @@ class JobListing(Base):
     status = Column(Enum(JobStatus), default=JobStatus.NEW)
 
     company = relationship("Company", back_populates="jobs")
-    score = relationship("JobScore", uselist=False, back_populates="job")
-    application_log = relationship("ApplicationLog", uselist=False, back_populates="job")
+    score = relationship("JobScore", uselist=False, back_populates="job", cascade="all, delete-orphan")
+    application_log = relationship("ApplicationLog", uselist=False, back_populates="job", cascade="all, delete-orphan")
     form_fields = relationship("JobFormField", back_populates="job", cascade="all, delete-orphan")
 
 
