@@ -34,24 +34,28 @@ async def add_company(data: CompanyCreate, db: AsyncSession = Depends(get_db)):
 
 @router.delete("/companies/{company_id}")
 async def delete_company(company_id: int, db: AsyncSession = Depends(get_db)):
-    from sqlalchemy.orm import selectinload
-    # Eagerly load the full relationship chain so ORM cascade works
-    result = await db.execute(
-        select(Company)
-        .where(Company.id == company_id)
-        .options(
-            selectinload(Company.jobs)
-            .selectinload(JobListing.application_log),
-            selectinload(Company.jobs)
-            .selectinload(JobListing.score),
-            selectinload(Company.jobs)
-            .selectinload(JobListing.form_fields),
-        )
-    )
+    from sqlalchemy import delete as sql_delete, text
+    from app.models.models import ApplicationLog, JobScore, JobFormField
+
+    result = await db.execute(select(Company).where(Company.id == company_id))
     company = result.scalar_one_or_none()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
-    await db.delete(company)
+
+    # Get all job IDs for this company
+    job_rows = await db.execute(
+        select(JobListing.id).where(JobListing.company_id == company_id)
+    )
+    job_ids = [r[0] for r in job_rows.all()]
+
+    if job_ids:
+        # Delete children of jobs first (order matters for FK constraints)
+        await db.execute(sql_delete(ApplicationLog).where(ApplicationLog.job_id.in_(job_ids)))
+        await db.execute(sql_delete(JobScore).where(JobScore.job_id.in_(job_ids)))
+        await db.execute(sql_delete(JobFormField).where(JobFormField.job_id.in_(job_ids)))
+        await db.execute(sql_delete(JobListing).where(JobListing.company_id == company_id))
+
+    await db.execute(sql_delete(Company).where(Company.id == company_id))
     await db.commit()
     return {"detail": "deleted"}
 
