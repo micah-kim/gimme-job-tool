@@ -214,7 +214,8 @@ def _run_playwright_apply(job_url: str, profile_data: dict, resume_path: str, dr
 
     screenshot_path = ""
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        # Dry run: open visible browser so user can watch; live: headless
+        browser = p.chromium.launch(headless=not dry_run)
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         )

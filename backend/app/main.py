@@ -54,7 +54,12 @@ async def health():
     return {"status": "ok"}
 
 
+SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent / "screenshots"
+SCREENSHOTS_DIR.mkdir(exist_ok=True)
+
 # Serve the React frontend (production build)
+app.mount("/screenshots", StaticFiles(directory=str(SCREENSHOTS_DIR)), name="screenshots")
+
 if FRONTEND_DIR.exists():
     app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR / "assets")), name="static")
 
