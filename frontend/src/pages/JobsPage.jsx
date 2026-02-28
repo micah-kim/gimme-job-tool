@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { getJobs, triggerFetch } from '../api/client';
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState([]);
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(false);
+  const location = useLocation();
 
   const load = async () => {
     try {
@@ -17,7 +19,7 @@ export default function JobsPage() {
     }
   };
 
-  useEffect(() => { load(); }, [statusFilter]);
+  useEffect(() => { load(); }, [statusFilter, location.key]);
 
   const handleFetch = async () => {
     setLoading(true);
