@@ -156,3 +156,16 @@ async def get_job_score(job_id: int, db: AsyncSession = Depends(get_db)):
 async def trigger_fetch(db: AsyncSession = Depends(get_db)):
     count = await fetch_all_jobs(db)
     return {"jobs_fetched": count}
+
+
+@router.post("/jobs/retry-failed")
+async def retry_failed_jobs(db: AsyncSession = Depends(get_db)):
+    """Reset all FAILED jobs back to NEW so the pipeline can retry them."""
+    result = await db.execute(
+        select(JobListing).where(JobListing.status == JobStatus.FAILED)
+    )
+    jobs = result.scalars().all()
+    for job in jobs:
+        job.status = JobStatus.NEW
+    await db.commit()
+    return {"jobs_reset": len(jobs)}

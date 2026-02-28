@@ -40,6 +40,7 @@ export const uploadResume = async (file) => {
 // Pipeline
 export const runPipeline = (opts = {}) => request('/pipeline/run', { method: 'POST', body: JSON.stringify(opts) });
 export const triggerFetch = () => request('/jobs/fetch', { method: 'POST' });
+export const retryFailed = () => request('/jobs/retry-failed', { method: 'POST' });
 export const applyToJob = (id) => request(`/jobs/${id}/apply`, { method: 'POST' });
 export const applyAll = () => request('/apply/run', { method: 'POST' });
 

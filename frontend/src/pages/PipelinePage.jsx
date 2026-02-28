@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { runPipeline, triggerFetch, applyAll } from '../api/client';
+import { runPipeline, triggerFetch, applyAll, retryFailed } from '../api/client';
 
 export default function PipelinePage() {
   const [result, setResult] = useState(null);
@@ -58,6 +58,12 @@ export default function PipelinePage() {
               {loading === 'apply' ? 'Applying...' : '2. Apply to All'}
             </button>
             <span className="text-sm text-muted">Submits applications to all eligible jobs (skips ones already applied to or previously failed).</span>
+          </div>
+          <div className="flex gap-1 items-center">
+            <button className="secondary" onClick={() => run('retry', retryFailed)} disabled={!!loading} style={{ minWidth: 160 }}>
+              {loading === 'retry' ? 'Resetting...' : '↩ Retry Failed'}
+            </button>
+            <span className="text-sm text-muted">Resets all failed jobs back to "New" so the pipeline can try applying to them again.</span>
           </div>
         </div>
       </div>
