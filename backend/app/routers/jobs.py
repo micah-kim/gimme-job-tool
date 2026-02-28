@@ -1,6 +1,7 @@
 """API routes for job listings and companies."""
 
 import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -9,7 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.models.models import Company, JobListing, JobScore, JobStatus
 from app.schemas.schemas import CompanyCreate, CompanyOut, JobListingOut, JobScoreOut
+from app.services.ats_lookup import lookup_ats
 from app.services.job_fetcher import fetch_all_jobs, fetch_jobs_for_company
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["jobs"])
 
@@ -25,7 +29,36 @@ async def list_companies(db: AsyncSession = Depends(get_db)):
 
 @router.post("/companies", response_model=CompanyOut)
 async def add_company(data: CompanyCreate, db: AsyncSession = Depends(get_db)):
-    company = Company(name=data.name, ats_type=data.ats_type, board_token=data.board_token)
+    ats_type = data.ats_type.strip().lower() if data.ats_type else None
+    board_token = data.board_token.strip() if data.board_token else None
+
+    # If either field is missing, run ATS lookup
+    if not ats_type or not board_token:
+        logger.info(f"Running ATS lookup for '{data.name}' (ats={ats_type}, token={board_token})")
+        result = await lookup_ats(data.name, ats_type=ats_type, board_token=board_token)
+        if not result:
+            raise HTTPException(
+                status_code=422,
+                detail=f"No job board found for '{data.name}'. Try providing ATS type and/or board token manually.",
+            )
+        ats_type = result["ats_type"]
+        board_token = result["board_token"]
+        logger.info(f"Discovered: {ats_type} / {board_token}")
+    else:
+        # Both provided — verify the combination is valid
+        result = await lookup_ats(data.name, ats_type=ats_type, board_token=board_token)
+        if not result:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Could not verify job board at {ats_type}/{board_token}. Check ATS type and board token.",
+            )
+
+    # Check for duplicate board_token
+    existing = await db.execute(select(Company).where(Company.board_token == board_token))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail=f"A company with board token '{board_token}' already exists.")
+
+    company = Company(name=data.name, ats_type=ats_type, board_token=board_token)
     db.add(company)
     await db.commit()
     await db.refresh(company)

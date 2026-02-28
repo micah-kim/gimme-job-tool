@@ -79,12 +79,15 @@ class UserProfileOut(UserProfileCreate):
 
 class CompanyCreate(BaseModel):
     name: str
-    ats_type: str  # "greenhouse" or "ashby"
-    board_token: str
+    ats_type: str | None = None
+    board_token: str | None = None
 
 
-class CompanyOut(CompanyCreate):
+class CompanyOut(BaseModel):
     id: int
+    name: str
+    ats_type: str | None = None
+    board_token: str | None = None
     last_scraped_at: datetime | None = None
     created_at: datetime
 

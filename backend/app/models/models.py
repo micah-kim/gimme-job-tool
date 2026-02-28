@@ -64,8 +64,8 @@ class Company(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False)
-    ats_type = Column(Enum(ATSType), nullable=False)
-    board_token = Column(String, nullable=False, unique=True)
+    ats_type = Column(Enum(ATSType), nullable=True)
+    board_token = Column(String, nullable=True, unique=True)
     last_scraped_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
