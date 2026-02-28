@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 
 from app.core.database import engine
 from app.models.models import Base
-from app.routers import jobs, pipeline, profile
+from app.routers import jobs, pipeline, profile, qa
 
 logging.basicConfig(
     level=logging.INFO,
@@ -47,6 +47,7 @@ app.add_middleware(
 app.include_router(jobs.router)
 app.include_router(profile.router)
 app.include_router(pipeline.router)
+app.include_router(qa.router)
 
 
 @app.get("/api/health")

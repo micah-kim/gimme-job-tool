@@ -164,8 +164,9 @@ def _best_option_match(answer: str, options: list[str]) -> str | None:
 
 def _fill_greenhouse_form(
     page: SyncPage, profile_data: dict, resume_path: str, ai_client: AzureOpenAI,
+    qa_answers: dict | None = None,
 ) -> None:
-    """Fill out a Greenhouse application form — field-aware, required-only."""
+    """Fill out a Greenhouse application form — field-aware, uses Q&A bank when available."""
 
     # Phase 1: Standard fields
     for selector, value in [
@@ -214,7 +215,7 @@ def _fill_greenhouse_form(
 
         for field_div in custom_fields:
             try:
-                _process_greenhouse_custom_field(field_div, profile_data, ai_client, page)
+                _process_greenhouse_custom_field(field_div, profile_data, ai_client, page, qa_answers=qa_answers)
             except Exception as e:
                 logger.warning(f"Error processing custom field: {e}")
     except Exception as e:
@@ -223,8 +224,13 @@ def _fill_greenhouse_form(
 
 def _process_greenhouse_custom_field(
     field_div, profile_data: dict, ai_client: AzureOpenAI, page: SyncPage,
+    qa_answers: dict | None = None,
 ) -> None:
-    """Process a single custom field div in a Greenhouse form."""
+    """Process a single custom field div in a Greenhouse form.
+    
+    qa_answers: optional dict mapping normalized label text -> answer from Q&A bank.
+    When provided, Q&A bank answers take priority over profile matching.
+    """
     # Extract label text
     label_el = field_div.locator("label").first
     if label_el.count() == 0:
@@ -244,15 +250,22 @@ def _process_greenhouse_custom_field(
     if req_els.count() > 0:
         is_required = True
 
-    # Match label to profile answer
-    profile_answer = _match_label_to_answer(label_first_line, profile_data)
+    # Try Q&A bank answer first, then fall back to profile matching
+    qa_answer = None
+    if qa_answers:
+        import re
+        normalized = re.sub(r'[^\w\s]', '', label_first_line.lower().strip())
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
+        qa_answer = qa_answers.get(normalized)
 
-    # Decision: fill if required OR if we have a profile answer for it
+    profile_answer = qa_answer or _match_label_to_answer(label_first_line, profile_data)
+
+    # Decision: fill if required OR if we have any answer for it
     if not is_required and not profile_answer:
-        logger.debug(f"Skipping field (not required, no profile answer): {label_first_line[:60]}")
+        logger.debug(f"Skipping field (not required, no answer): {label_first_line[:60]}")
         return
 
-    logger.info(f"Processing field (required={is_required}, has_answer={bool(profile_answer)}): {label_first_line[:60]}")
+    logger.info(f"Processing field (required={is_required}, source={'qa_bank' if qa_answer else 'profile' if profile_answer else 'none'}): {label_first_line[:60]}")
 
     # Determine field type
     select_el = field_div.locator("select")
@@ -433,7 +446,7 @@ def _fill_generic_form(
         pass
 
 
-def _run_playwright_apply(job_url: str, profile_data: dict, resume_path: str, dry_run: bool, board_token: str = "") -> dict:
+def _run_playwright_apply(job_url: str, profile_data: dict, resume_path: str, dry_run: bool, board_token: str = "", qa_answers: dict | None = None) -> dict:
     """Run Playwright in a sync context (called from a thread). Returns result dict."""
     import re
     os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
@@ -486,7 +499,7 @@ def _run_playwright_apply(job_url: str, profile_data: dict, resume_path: str, dr
                 except Exception:
                     pass
 
-            _fill_greenhouse_form(page, profile_data, resume_path, ai_client)
+            _fill_greenhouse_form(page, profile_data, resume_path, ai_client, qa_answers=qa_answers)
 
         elif "ashby" in url_lower or "jobs.ashbyhq.com" in url_lower:
             page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
@@ -645,12 +658,33 @@ async def apply_to_job(db: AsyncSession, job: JobListing, dry_run: bool = False)
         if company:
             board_token = company.board_token or ""
 
+    # Load Q&A bank answers for this job's form fields
+    qa_answers = {}
+    try:
+        from app.models.models import JobFormField, QAEntry
+        field_result = await db.execute(
+            select(JobFormField).where(JobFormField.job_id == job.id).where(JobFormField.qa_entry_id.isnot(None))
+        )
+        form_fields = field_result.scalars().all()
+        for ff in form_fields:
+            qa_result = await db.execute(select(QAEntry).where(QAEntry.id == ff.qa_entry_id))
+            qa = qa_result.scalar_one_or_none()
+            if qa and qa.answer:
+                # Map normalized label -> answer
+                import re
+                normalized = re.sub(r'[^\w\s]', '', ff.label_text.lower().strip())
+                normalized = re.sub(r'\s+', ' ', normalized).strip()
+                qa_answers[normalized] = qa.answer
+        logger.info(f"Loaded {len(qa_answers)} Q&A answers for job {job.id}")
+    except Exception as e:
+        logger.warning(f"Could not load Q&A answers: {e}")
+
     try:
         # Run Playwright in a separate thread to avoid Windows event loop issues
         loop = asyncio.get_event_loop()
         pw_result = await loop.run_in_executor(
             None,
-            partial(_run_playwright_apply, job.url, profile_data, resume_path, dry_run, board_token),
+            partial(_run_playwright_apply, job.url, profile_data, resume_path, dry_run, board_token, qa_answers),
         )
 
         app_log.screenshot_path = pw_result.get("screenshot_path", "")

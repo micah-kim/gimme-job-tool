@@ -46,3 +46,17 @@ export const applyAll = () => request('/apply/run', { method: 'POST' });
 
 // Applications
 export const getApplications = () => request('/applications');
+
+// Q&A Bank
+export const getQAEntries = (params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return request(`/qa?${qs}`);
+};
+export const getUnansweredQuestions = (jobIds = null) => {
+  const qs = jobIds ? `?job_ids=${jobIds.join(',')}` : '';
+  return request(`/qa/unanswered${qs}`);
+};
+export const answerQuestions = (answers) => request('/qa/answer', { method: 'POST', body: JSON.stringify({ answers }) });
+export const scanJobs = (jobIds = null) => request('/qa/scan', { method: 'POST', body: JSON.stringify(jobIds) });
+export const seedQA = () => request('/qa/seed', { method: 'POST' });
+export const getScanStatus = () => request('/qa/scan-status');

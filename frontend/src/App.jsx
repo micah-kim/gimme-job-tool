@@ -4,6 +4,7 @@ import CompaniesPage from './pages/CompaniesPage';
 import ProfilePage from './pages/ProfilePage';
 import ApplicationsPage from './pages/ApplicationsPage';
 import PipelinePage from './pages/PipelinePage';
+import QuestionsPage from './pages/QuestionsPage';
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
         <NavLink to="/" end>Jobs</NavLink>
         <NavLink to="/companies">Companies</NavLink>
         <NavLink to="/profile">Profile</NavLink>
+        <NavLink to="/questions">Questions</NavLink>
         <NavLink to="/applications">Applications</NavLink>
         <NavLink to="/pipeline">Pipeline</NavLink>
       </nav>
@@ -21,6 +23,7 @@ export default function App() {
           <Route path="/" element={<JobsPage />} />
           <Route path="/companies" element={<CompaniesPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/questions" element={<QuestionsPage />} />
           <Route path="/applications" element={<ApplicationsPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
         </Routes>

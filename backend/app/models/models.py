@@ -91,6 +91,7 @@ class JobListing(Base):
     company = relationship("Company", back_populates="jobs")
     score = relationship("JobScore", uselist=False, back_populates="job")
     application_log = relationship("ApplicationLog", uselist=False, back_populates="job")
+    form_fields = relationship("JobFormField", back_populates="job", cascade="all, delete-orphan")
 
 
 class JobScore(Base):
@@ -119,3 +120,36 @@ class ApplicationLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     job = relationship("JobListing", back_populates="application_log")
+
+
+class QAEntry(Base):
+    """Canonical Q&A bank — one entry per unique question across all applications."""
+    __tablename__ = "qa_entry"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    canonical_question = Column(Text, nullable=False, unique=True)
+    display_question = Column(Text, nullable=False)
+    field_type = Column(String, nullable=False)  # select / text / textarea / checkbox
+    answer = Column(Text, nullable=True)
+    category = Column(String, default="other")  # demographic, work_auth, education, etc.
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    form_fields = relationship("JobFormField", back_populates="qa_entry")
+
+
+class JobFormField(Base):
+    """Per-job form field discovered during scanning."""
+    __tablename__ = "job_form_field"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(Integer, ForeignKey("job_listing.id"), nullable=False)
+    label_text = Column(Text, nullable=False)
+    field_type = Column(String, nullable=False)  # select / text / textarea / checkbox
+    options_json = Column(Text, default="[]")  # JSON: [[text, value], ...]
+    is_required = Column(Boolean, default=False)
+    qa_entry_id = Column(Integer, ForeignKey("qa_entry.id"), nullable=True)
+    scanned_at = Column(DateTime, default=datetime.utcnow)
+
+    job = relationship("JobListing", back_populates="form_fields")
+    qa_entry = relationship("QAEntry", back_populates="form_fields")

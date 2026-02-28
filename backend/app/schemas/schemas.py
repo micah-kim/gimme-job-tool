@@ -152,7 +152,63 @@ class PipelineRunRequest(BaseModel):
 class PipelineRunResult(BaseModel):
     dry_run: bool = False
     jobs_fetched: int = 0
+    jobs_scanned: int = 0
+    questions_found: int = 0
+    questions_unanswered: int = 0
+    needs_review: bool = False
     forms_filled: int = 0
     applications_failed: int = 0
     applications_skipped: int = 0
     errors: list[str] = []
+
+
+# ── Q&A Bank ──
+
+
+class QAEntryOut(BaseModel):
+    id: int
+    canonical_question: str
+    display_question: str
+    field_type: str
+    answer: str | None = None
+    category: str = "other"
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class QAAnswerRequest(BaseModel):
+    """Batch answer multiple Q&A entries."""
+    answers: list[dict]  # [{"qa_id": 1, "answer": "Yes"}, ...]
+
+
+class JobFormFieldOut(BaseModel):
+    id: int
+    job_id: int
+    label_text: str
+    field_type: str
+    options_json: str = "[]"
+    is_required: bool = False
+    qa_entry_id: int | None = None
+    scanned_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ScanResult(BaseModel):
+    jobs_scanned: int = 0
+    total_fields: int = 0
+    matched_fields: int = 0
+    unmatched_fields: int = 0
+    errors: list[str] = []
+
+
+class UnmatchedQuestion(BaseModel):
+    """An unanswered Q&A entry with associated form options."""
+    qa_id: int
+    display_question: str
+    field_type: str
+    category: str
+    options: list[list[str]] = []  # [[text, value], ...] from first job that has this Q
+    job_count: int = 1  # how many jobs ask this question
