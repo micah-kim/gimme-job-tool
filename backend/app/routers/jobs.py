@@ -34,7 +34,20 @@ async def add_company(data: CompanyCreate, db: AsyncSession = Depends(get_db)):
 
 @router.delete("/companies/{company_id}")
 async def delete_company(company_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Company).where(Company.id == company_id))
+    from sqlalchemy.orm import selectinload
+    # Eagerly load the full relationship chain so ORM cascade works
+    result = await db.execute(
+        select(Company)
+        .where(Company.id == company_id)
+        .options(
+            selectinload(Company.jobs)
+            .selectinload(JobListing.application_log),
+            selectinload(Company.jobs)
+            .selectinload(JobListing.score),
+            selectinload(Company.jobs)
+            .selectinload(JobListing.form_fields),
+        )
+    )
     company = result.scalar_one_or_none()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
