@@ -336,7 +336,16 @@ async def apply_to_job(db: AsyncSession, job: JobListing, dry_run: bool = False)
         "preferences": profile.preferences or "{}",
     }
 
-    app_log = ApplicationLog(job_id=job.id, status=ApplicationStatus.PENDING)
+    # Check for existing application log (from a previous failed attempt)
+    existing_log_result = await db.execute(
+        select(ApplicationLog).where(ApplicationLog.job_id == job.id)
+    )
+    app_log = existing_log_result.scalar_one_or_none()
+    if app_log:
+        app_log.status = ApplicationStatus.PENDING
+        app_log.error_message = ""
+    else:
+        app_log = ApplicationLog(job_id=job.id, status=ApplicationStatus.PENDING)
 
     # Get the board token from the company for Greenhouse URL construction
     board_token = ""
@@ -369,7 +378,8 @@ async def apply_to_job(db: AsyncSession, job: JobListing, dry_run: bool = False)
             # Live run: persist the log and update job status
             app_log.status = ApplicationStatus.SUBMITTED
             app_log.applied_at = datetime.utcnow()
-            db.add(app_log)
+            if not app_log.id:
+                db.add(app_log)
             job.status = JobStatus.APPLIED
             await db.commit()
             logger.info(f"Applied to job {job.id}: {job.title}")
@@ -378,7 +388,8 @@ async def apply_to_job(db: AsyncSession, job: JobListing, dry_run: bool = False)
         app_log.status = ApplicationStatus.FAILED
         app_log.error_message = str(e)
         if not dry_run:
-            db.add(app_log)
+            if not app_log.id:
+                db.add(app_log)
             job.status = JobStatus.FAILED
             await db.commit()
         logger.error(f"Failed to apply to job {job.id}: {e}")
