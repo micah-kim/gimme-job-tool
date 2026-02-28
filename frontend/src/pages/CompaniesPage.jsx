@@ -29,15 +29,21 @@ export default function CompaniesPage() {
     }
   };
 
+  const [deleting, setDeleting] = useState(null);
+
   const handleDelete = async (id) => {
-    if (confirm('Remove this company?')) {
-      try {
-        await deleteCompany(id);
-        await load();
-      } catch (e) {
-        console.error('Failed to delete company:', e);
-        setError(e.message);
-      }
+    setDeleting(id);
+  };
+
+  const confirmDelete = async () => {
+    try {
+      await deleteCompany(deleting);
+      setDeleting(null);
+      await load();
+    } catch (e) {
+      console.error('Failed to delete company:', e);
+      setError(e.message);
+      setDeleting(null);
     }
   };
 
@@ -69,6 +75,16 @@ export default function CompaniesPage() {
           <button type="submit" style={{ alignSelf: 'flex-end' }}>Add</button>
         </form>
       </div>
+
+      {deleting && (
+        <div className="card mb-2" style={{ borderColor: '#da3633', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Remove <strong>{companies.find(c => c.id === deleting)?.name}</strong> and all its jobs?</span>
+          <div className="flex gap-1">
+            <button className="danger" onClick={confirmDelete}>Yes, Remove</button>
+            <button className="secondary" onClick={() => setDeleting(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <table>

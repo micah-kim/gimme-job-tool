@@ -94,7 +94,8 @@ export default function ProfilePage() {
     if (file) {
       try {
         const res = await uploadResume(file);
-        alert(`Resume uploaded: ${res.filename}`);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
       } catch (err) {
         console.error('Failed to upload resume:', err);
         setError(err.message);

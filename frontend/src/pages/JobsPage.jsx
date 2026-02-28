@@ -21,12 +21,17 @@ export default function JobsPage() {
 
   useEffect(() => { load(); }, [statusFilter, location.key]);
 
+  const [message, setMessage] = useState('');
+
   const handleFetch = async () => {
     setLoading(true);
+    setMessage('');
     try {
       const res = await triggerFetch();
-      alert(`Fetched ${res.jobs_fetched} new jobs`);
+      setMessage(`✅ Fetched ${res.jobs_fetched} new jobs`);
       await load();
+    } catch (e) {
+      setMessage(`❌ Fetch failed: ${e.message}`);
     } finally {
       setLoading(false);
     }
@@ -50,7 +55,7 @@ export default function JobsPage() {
           </button>
         </div>
       </div>
-
+      {message && <div className="card mb-2 text-sm" style={{ padding: '0.75rem' }}>{message}</div>}
       <div className="card">
         <table>
           <thead>
