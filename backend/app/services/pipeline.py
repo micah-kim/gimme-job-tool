@@ -23,7 +23,7 @@ async def run_pipeline(
     if dry_run is not None:
         settings.dry_run = dry_run
 
-    result = PipelineRunResult()
+    result = PipelineRunResult(dry_run=settings.dry_run)
 
     try:
         # Step 1: Fetch new jobs from all tracked companies
@@ -33,7 +33,7 @@ async def run_pipeline(
         # Step 2: Apply to all eligible jobs (skips APPLIED/FAILED)
         logger.info("Pipeline step 2/2: Applying to jobs...")
         submitted, failed, skipped = await apply_to_all_jobs(db, max_applications, dry_run=settings.dry_run)
-        result.applications_submitted = submitted
+        result.forms_filled = submitted
         result.applications_failed = failed
         result.applications_skipped = skipped
 
@@ -44,7 +44,7 @@ async def run_pipeline(
         settings.dry_run = original_dry_run
 
     logger.info(
-        f"Pipeline complete: {result.jobs_fetched} fetched, {result.applications_submitted} applied, "
+        f"Pipeline complete: {result.jobs_fetched} fetched, {result.forms_filled} filled, "
         f"{result.applications_failed} failed, {result.applications_skipped} skipped"
     )
     return result

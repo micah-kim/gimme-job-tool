@@ -143,8 +143,9 @@ class PipelineRunRequest(BaseModel):
 
 
 class PipelineRunResult(BaseModel):
+    dry_run: bool = False
     jobs_fetched: int = 0
-    applications_submitted: int = 0
+    forms_filled: int = 0
     applications_failed: int = 0
     applications_skipped: int = 0
     errors: list[str] = []

@@ -82,9 +82,29 @@ export default function PipelinePage() {
       {result && (
         <div className="card">
           <h3 className="mb-1">📊 Result</h3>
-          <pre style={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem', color: '#8b949e' }}>
-            {JSON.stringify(result, null, 2)}
-          </pre>
+          {result.error ? (
+            <p style={{ color: '#f85149' }}>{result.error}</p>
+          ) : (
+            <div className="text-sm" style={{ lineHeight: 2 }}>
+              {result.dry_run && (
+                <p style={{ color: '#d29922', fontWeight: 600, marginBottom: '0.5rem' }}>
+                  🧪 DRY RUN — No applications were actually submitted.
+                </p>
+              )}
+              <p>📥 Jobs fetched: <strong>{result.jobs_fetched ?? '—'}</strong></p>
+              <p>{result.dry_run ? '📝 Forms previewed' : '✅ Applications submitted'}: <strong>{result.forms_filled ?? '—'}</strong></p>
+              <p>❌ Failed: <strong>{result.applications_failed ?? '—'}</strong></p>
+              <p>⏭️ Skipped (already applied/failed): <strong>{result.applications_skipped ?? '—'}</strong></p>
+              {result.errors?.length > 0 && (
+                <div style={{ marginTop: '0.5rem', color: '#f85149' }}>
+                  <strong>Errors:</strong>
+                  <ul style={{ paddingLeft: '1.2rem' }}>
+                    {result.errors.map((e, i) => <li key={i}>{e}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

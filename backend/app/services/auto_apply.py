@@ -195,7 +195,7 @@ def _fill_generic_form(
         pass
 
 
-def _run_playwright_apply(job_url: str, profile_data: dict, resume_path: str, dry_run: bool) -> dict:
+def _run_playwright_apply(job_url: str, profile_data: dict, resume_path: str, dry_run: bool, board_token: str = "") -> dict:
     """Run Playwright in a sync context (called from a thread). Returns result dict."""
     os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
 
@@ -220,17 +220,73 @@ def _run_playwright_apply(job_url: str, profile_data: dict, resume_path: str, dr
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         )
         page = context.new_page()
-        page.goto(job_url, wait_until="networkidle", timeout=30000)
 
         url_lower = job_url.lower()
         cover_letter = ""
-        if "greenhouse" in url_lower or "boards.greenhouse.io" in url_lower:
+
+        # For Greenhouse jobs with custom career pages, go directly to the hosted apply form
+        if "gh_jid=" in url_lower or "greenhouse" in url_lower or board_token:
+            # Extract job ID and try the standard Greenhouse application URL
+            import re
+            gh_match = re.search(r'gh_jid=(\d+)', job_url)
+            if not gh_match:
+                gh_match = re.search(r'/jobs/(\d+)', job_url)
+            if not gh_match:
+                gh_match = re.search(r'/positions/(\d+)', job_url)
+            if gh_match:
+                gh_job_id = gh_match.group(1)
+                # Use the board_token passed from the company record
+                if not board_token:
+                    bm = re.search(r'boards\.greenhouse\.io/(\w+)', job_url)
+                    board_token = bm.group(1) if bm else ""
+
+                if board_token:
+                    apply_url = f"https://boards.greenhouse.io/embed/job_app?for={board_token}&token={gh_job_id}"
+                else:
+                    apply_url = job_url
+                logger.info(f"Greenhouse apply URL: {apply_url}")
+                page.goto(apply_url, wait_until="networkidle", timeout=30000)
+            else:
+                page.goto(job_url, wait_until="networkidle", timeout=30000)
+
+            # If we landed on a listing page, try clicking "Apply" button
+            apply_btn = page.locator("a:has-text('Apply'), button:has-text('Apply')")
+            if apply_btn.count() > 0:
+                try:
+                    apply_btn.first.click()
+                    page.wait_for_load_state("networkidle", timeout=10000)
+                except Exception:
+                    pass
+
             _fill_greenhouse_form(page, profile, resume_path, cover_letter, ai_client)
+
         elif "ashby" in url_lower or "jobs.ashbyhq.com" in url_lower:
+            page.goto(job_url, wait_until="networkidle", timeout=30000)
+            # Ashby: click Apply button to reveal the form
+            apply_btn = page.locator("button:has-text('Apply'), a:has-text('Apply')")
+            if apply_btn.count() > 0:
+                try:
+                    apply_btn.first.click()
+                    page.wait_for_timeout(2000)
+                except Exception:
+                    pass
             _fill_ashby_form(page, profile, resume_path, cover_letter, ai_client)
+
         elif "lever.co" in url_lower or "jobs.lever.co" in url_lower:
+            # Lever: navigate to /apply at the end of the URL
+            apply_url = job_url.rstrip('/') + '/apply'
+            page.goto(apply_url, wait_until="networkidle", timeout=30000)
             _fill_lever_form(page, profile, resume_path, cover_letter, ai_client)
+
         else:
+            page.goto(job_url, wait_until="networkidle", timeout=30000)
+            apply_btn = page.locator("a:has-text('Apply'), button:has-text('Apply')")
+            if apply_btn.count() > 0:
+                try:
+                    apply_btn.first.click()
+                    page.wait_for_load_state("networkidle", timeout=10000)
+                except Exception:
+                    pass
             _fill_generic_form(page, profile, resume_path, cover_letter, ai_client)
 
         if not dry_run:
@@ -246,7 +302,6 @@ def _run_playwright_apply(job_url: str, profile_data: dict, resume_path: str, dr
         page.screenshot(path=screenshot_path, full_page=True)
 
         if dry_run:
-            # Keep browser open for 30s so user can inspect the filled form
             logger.info("Dry run: browser will stay open for 30 seconds for inspection...")
             page.wait_for_timeout(30000)
 
@@ -277,12 +332,25 @@ async def apply_to_job(db: AsyncSession, job: JobListing, dry_run: bool = False)
 
     app_log = ApplicationLog(job_id=job.id, status=ApplicationStatus.PENDING)
 
+    # Get the board token from the company for Greenhouse URL construction
+    board_token = ""
+    try:
+        if job.company:
+            board_token = job.company.board_token or ""
+    except Exception:
+        # Company not loaded; query it
+        from app.models.models import Company
+        company_result = await db.execute(select(Company).where(Company.id == job.company_id))
+        company = company_result.scalar_one_or_none()
+        if company:
+            board_token = company.board_token or ""
+
     try:
         # Run Playwright in a separate thread to avoid Windows event loop issues
         loop = asyncio.get_event_loop()
         pw_result = await loop.run_in_executor(
             None,
-            partial(_run_playwright_apply, job.url, profile_data, resume_path, dry_run),
+            partial(_run_playwright_apply, job.url, profile_data, resume_path, dry_run, board_token),
         )
 
         app_log.screenshot_path = pw_result.get("screenshot_path", "")
@@ -319,9 +387,12 @@ async def apply_to_all_jobs(
     Returns (submitted, failed, skipped) counts."""
     limit = max_applications or settings.max_applications_per_run
 
+    from sqlalchemy.orm import selectinload
+
     # Get jobs that haven't been applied to or failed
     result = await db.execute(
         select(JobListing)
+        .options(selectinload(JobListing.company))
         .where(JobListing.status.in_([JobStatus.NEW, JobStatus.MATCHED]))
         .order_by(JobListing.fetched_at.desc())
         .limit(limit)
