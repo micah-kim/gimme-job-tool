@@ -245,6 +245,11 @@ def _run_playwright_apply(job_url: str, profile_data: dict, resume_path: str, dr
         screenshot_path = os.path.join(SCREENSHOTS_DIR, f"apply_{ts}.png")
         page.screenshot(path=screenshot_path, full_page=True)
 
+        if dry_run:
+            # Keep browser open for 30s so user can inspect the filled form
+            logger.info("Dry run: browser will stay open for 30 seconds for inspection...")
+            page.wait_for_timeout(30000)
+
         browser.close()
 
     return {"screenshot_path": screenshot_path}
