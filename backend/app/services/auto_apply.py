@@ -245,23 +245,27 @@ def _run_playwright_apply(job_url: str, profile_data: dict, resume_path: str, dr
                 else:
                     apply_url = job_url
                 logger.info(f"Greenhouse apply URL: {apply_url}")
-                page.goto(apply_url, wait_until="networkidle", timeout=30000)
+                page.goto(apply_url, wait_until="domcontentloaded", timeout=30000)
+                # Wait for form fields to render
+                page.wait_for_timeout(3000)
             else:
-                page.goto(job_url, wait_until="networkidle", timeout=30000)
+                page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
+                page.wait_for_timeout(3000)
 
             # If we landed on a listing page, try clicking "Apply" button
             apply_btn = page.locator("a:has-text('Apply'), button:has-text('Apply')")
             if apply_btn.count() > 0:
                 try:
                     apply_btn.first.click()
-                    page.wait_for_load_state("networkidle", timeout=10000)
+                    page.wait_for_timeout(3000)
                 except Exception:
                     pass
 
             _fill_greenhouse_form(page, profile, resume_path, cover_letter, ai_client)
 
         elif "ashby" in url_lower or "jobs.ashbyhq.com" in url_lower:
-            page.goto(job_url, wait_until="networkidle", timeout=30000)
+            page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_timeout(3000)
             # Ashby: click Apply button to reveal the form
             apply_btn = page.locator("button:has-text('Apply'), a:has-text('Apply')")
             if apply_btn.count() > 0:
@@ -275,16 +279,18 @@ def _run_playwright_apply(job_url: str, profile_data: dict, resume_path: str, dr
         elif "lever.co" in url_lower or "jobs.lever.co" in url_lower:
             # Lever: navigate to /apply at the end of the URL
             apply_url = job_url.rstrip('/') + '/apply'
-            page.goto(apply_url, wait_until="networkidle", timeout=30000)
+            page.goto(apply_url, wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_timeout(3000)
             _fill_lever_form(page, profile, resume_path, cover_letter, ai_client)
 
         else:
-            page.goto(job_url, wait_until="networkidle", timeout=30000)
+            page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_timeout(3000)
             apply_btn = page.locator("a:has-text('Apply'), button:has-text('Apply')")
             if apply_btn.count() > 0:
                 try:
                     apply_btn.first.click()
-                    page.wait_for_load_state("networkidle", timeout=10000)
+                    page.wait_for_timeout(3000)
                 except Exception:
                     pass
             _fill_generic_form(page, profile, resume_path, cover_letter, ai_client)
