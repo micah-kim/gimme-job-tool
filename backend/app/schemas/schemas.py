@@ -38,10 +38,13 @@ class ApplicationAnswers(BaseModel):
     github_url: str = ""
     portfolio_url: str = ""
     # EEO / Demographics (voluntary self-identification)
-    gender: str = ""  # "Male", "Female", "Non-binary", "Prefer not to say"
-    race_ethnicity: str = ""  # "White", "Black or African American", "Asian", "Hispanic or Latino", "Native American or Alaska Native", "Native Hawaiian or Other Pacific Islander", "Two or More Races", "Prefer not to say"
-    veteran_status: str = ""  # "I am a veteran", "I am not a veteran", "Prefer not to say"
-    disability_status: str = ""  # "Yes, I have a disability", "No, I do not have a disability", "Prefer not to say"
+    gender: str = ""  # "Male", "Female", "Decline To Self Identify"
+    race_ethnicity: str = ""  # "Decline To Self Identify", "Asian", "White", etc.
+    hispanic_latino: str = ""  # "Yes", "No", "Decline To Self Identify"
+    veteran_status: str = ""  # "I am not a protected veteran", "Decline to Self Identify"
+    disability_status: str = ""  # "No", "Yes", "I do not want to answer"
+    lgbtq: str = ""  # "Decline to state", "Yes", "No"
+    sexual_orientation: str = ""  # "Decline to state"
     # Misc common questions
     over_18: str = ""  # "Yes" / "No"
     how_did_you_hear: str = ""

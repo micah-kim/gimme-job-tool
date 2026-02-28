@@ -69,6 +69,7 @@ _LABEL_TO_ANSWER_KEY = {
     "authorized": "authorized_to_work",
     "legally authorized": "authorized_to_work",
     "sponsorship": "sponsorship_needed",
+    "visa": "sponsorship_needed",
     "how did you hear": "how_did_you_hear",
     "non-compete": "non_compete",
     "non-solicitation": "non_compete",
@@ -78,8 +79,12 @@ _LABEL_TO_ANSWER_KEY = {
     "gender": "gender",
     "race": "race_ethnicity",
     "ethnicity": "race_ethnicity",
+    "hispanic": "hispanic_latino",
+    "latino": "hispanic_latino",
     "veteran": "veteran_status",
     "disability": "disability_status",
+    "lgbtq": "lgbtq",
+    "sexual orientation": "sexual_orientation",
     "over 18": "over_18",
     "relocate": "willing_to_relocate",
     "accommodation": "requires_accommodation",
@@ -144,6 +149,14 @@ def _best_option_match(answer: str, options: list[str]) -> str | None:
             if answer_lower == "yes" and opt_lower.startswith("yes"):
                 return opt_value
             if answer_lower == "no" and opt_lower.startswith("no"):
+                return opt_value
+
+    # "Decline" family: matches "decline to self identify", "I don't wish to answer", "prefer not to say", etc.
+    decline_keywords = ["decline", "prefer not", "don't wish", "do not wish", "not to say", "not to answer", "i don't want"]
+    if any(kw in answer_lower for kw in decline_keywords):
+        for opt_text, opt_value in options:
+            opt_lower = opt_text.lower().strip()
+            if any(kw in opt_lower for kw in decline_keywords):
                 return opt_value
 
     return None
@@ -227,17 +240,19 @@ def _process_greenhouse_custom_field(
     asterisk = field_div.locator("span.asterisk")
     if asterisk.count() > 0:
         is_required = True
-
-    # Also check aria-required on inputs/selects inside
     req_els = field_div.locator("[aria-required='true']")
     if req_els.count() > 0:
         is_required = True
 
-    if not is_required:
-        logger.debug(f"Skipping non-required field: {label_first_line}")
+    # Match label to profile answer
+    profile_answer = _match_label_to_answer(label_first_line, profile_data)
+
+    # Decision: fill if required OR if we have a profile answer for it
+    if not is_required and not profile_answer:
+        logger.debug(f"Skipping field (not required, no profile answer): {label_first_line[:60]}")
         return
 
-    logger.info(f"Processing required field: {label_first_line}")
+    logger.info(f"Processing field (required={is_required}, has_answer={bool(profile_answer)}): {label_first_line[:60]}")
 
     # Determine field type
     select_el = field_div.locator("select")
@@ -245,15 +260,12 @@ def _process_greenhouse_custom_field(
     textarea = field_div.locator("textarea")
     checkbox = field_div.locator("input[type='checkbox']")
 
-    # Match label to profile answer
-    profile_answer = _match_label_to_answer(label_first_line, profile_data)
-
     if select_el.count() > 0:
-        _fill_greenhouse_select(select_el.first, label_first_line, profile_answer, profile_data, ai_client)
+        _fill_greenhouse_select(select_el.first, label_first_line, profile_answer, profile_data, ai_client, is_required)
     elif text_input.count() > 0:
-        _fill_greenhouse_text(text_input.first, label_first_line, profile_answer, profile_data, ai_client)
+        _fill_greenhouse_text(text_input.first, label_first_line, profile_answer, profile_data, ai_client, is_required)
     elif textarea.count() > 0:
-        _fill_greenhouse_text(textarea.first, label_first_line, profile_answer, profile_data, ai_client)
+        _fill_greenhouse_text(textarea.first, label_first_line, profile_answer, profile_data, ai_client, is_required)
     elif checkbox.count() > 0 and profile_answer == "__ACKNOWLEDGE__":
         try:
             if not checkbox.first.is_checked():
@@ -263,9 +275,9 @@ def _process_greenhouse_custom_field(
 
 
 def _fill_greenhouse_select(
-    select_el, label_text: str, profile_answer: str | None, profile_data: dict, ai_client: AzureOpenAI,
+    select_el, label_text: str, profile_answer: str | None, profile_data: dict, ai_client: AzureOpenAI, is_required: bool = True,
 ) -> None:
-    """Fill a required select/dropdown field on a Greenhouse form."""
+    """Fill a select/dropdown field on a Greenhouse form."""
     # Get all options with their values
     options = select_el.evaluate("""el => {
         return Array.from(el.options)
@@ -274,7 +286,12 @@ def _fill_greenhouse_select(
     }""")
 
     if not options:
+        logger.warning(f"No options found for select: {label_text[:50]}")
         return
+
+    logger.info(f"Select '{label_text[:50]}' has {len(options)} options, profile_answer='{profile_answer}'")
+    for opt_text, opt_value in options[:5]:
+        logger.debug(f"  Option: '{opt_text}' (value={opt_value})")
 
     selected_value = None
 
@@ -283,42 +300,46 @@ def _fill_greenhouse_select(
         selected_value = options[0][1] if options else None
     elif profile_answer:
         selected_value = _best_option_match(profile_answer, options)
+        if selected_value:
+            logger.info(f"Matched profile answer '{profile_answer}' to option value '{selected_value}'")
+        else:
+            logger.warning(f"No option match for profile answer '{profile_answer}' among options")
 
-    # AI fallback if no profile match
-    if not selected_value:
+    # AI fallback only for required fields with no profile match
+    if not selected_value and is_required:
         option_texts = [o[0] for o in options]
         ai_answer = _answer_custom_question(ai_client, label_text, profile_data, option_texts)
         if ai_answer:
-            # Try to match AI answer to actual option
             for opt_text, opt_value in options:
                 if ai_answer.strip().lower() == opt_text.strip().lower():
                     selected_value = opt_value
                     break
             if not selected_value:
-                # Fuzzy match
                 for opt_text, opt_value in options:
                     if ai_answer.strip().lower() in opt_text.strip().lower() or opt_text.strip().lower() in ai_answer.strip().lower():
                         selected_value = opt_value
                         break
             if not selected_value and options:
-                # Last resort: pick first non-empty option
                 selected_value = options[0][1]
 
     if selected_value:
         try:
             select_el.select_option(value=selected_value)
-            logger.info(f"Selected '{selected_value}' for field: {label_text[:50]}")
+            logger.info(f"Selected value='{selected_value}' for field: {label_text[:50]}")
         except Exception as e:
             logger.warning(f"Could not select option for '{label_text[:50]}': {e}")
+    else:
+        logger.info(f"No answer available for non-required field: {label_text[:50]}")
 
 
 def _fill_greenhouse_text(
-    input_el, label_text: str, profile_answer: str | None, profile_data: dict, ai_client: AzureOpenAI,
+    input_el, label_text: str, profile_answer: str | None, profile_data: dict, ai_client: AzureOpenAI, is_required: bool = True,
 ) -> None:
-    """Fill a required text input/textarea field on a Greenhouse form."""
+    """Fill a text input/textarea field on a Greenhouse form."""
     answer = profile_answer if profile_answer and profile_answer != "__ACKNOWLEDGE__" else None
 
-    if not answer:
+    # AI fallback only for required fields with no profile answer
+    if not answer and is_required:
         answer = _answer_custom_question(ai_client, label_text, profile_data)
 
     if answer:
@@ -327,6 +348,8 @@ def _fill_greenhouse_text(
             logger.info(f"Filled text '{answer[:30]}...' for field: {label_text[:50]}")
         except Exception as e:
             logger.warning(f"Could not fill text for '{label_text[:50]}': {e}")
+    elif not is_required:
+        logger.debug(f"Skipping non-required text field with no answer: {label_text[:50]}")
 
 
 def _fill_ashby_form(

@@ -9,7 +9,8 @@ const emptyAnswers = {
   years_of_experience: '', current_company: '', current_title: '',
   desired_salary: '', salary_currency: 'USD', willing_to_relocate: '',
   available_start_date: '', website_url: '', github_url: '', portfolio_url: '',
-  gender: '', race_ethnicity: '', veteran_status: '', disability_status: '',
+  gender: '', race_ethnicity: '', hispanic_latino: '', veteran_status: '', disability_status: '',
+  lgbtq: '', sexual_orientation: '',
   over_18: '', how_did_you_hear: '', requires_accommodation: '',
   non_compete: '', previously_worked_here: '', location_city: '',
 };
@@ -329,27 +330,39 @@ export default function ProfilePage() {
         {/* ── EEO / Demographics ── */}
         <div className="card mb-2">
           <h3 className="mb-1">EEO / Demographics</h3>
-          <p className="text-sm text-muted mb-1">Voluntary self-identification. These are used to auto-fill optional demographic questions on applications.</p>
+          <p className="text-sm text-muted mb-1">These answers are used to auto-fill demographic questions on applications. Use "Decline" options to skip.</p>
           <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
             <SelectField label="Gender" value={form.application_answers.gender}
               onChange={v => updateAnswer('gender', v)}
-              options={['Male', 'Female', 'Non-binary', 'Prefer not to say']} />
+              options={['Male', 'Female', 'Non-binary', 'Decline To Self Identify']} />
             <SelectField label="Race / Ethnicity" value={form.application_answers.race_ethnicity}
               onChange={v => updateAnswer('race_ethnicity', v)}
               options={[
-                'White', 'Black or African American', 'Asian',
-                'Hispanic or Latino', 'Native American or Alaska Native',
+                'Decline To Self Identify', 'White', 'Black or African American', 'Asian',
+                'Hispanic or Latino', 'American Indian or Alaskan Native',
                 'Native Hawaiian or Other Pacific Islander', 'Two or More Races',
-                'Prefer not to say'
               ]} />
           </div>
           <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+            <SelectField label="Hispanic / Latino?" value={form.application_answers.hispanic_latino}
+              onChange={v => updateAnswer('hispanic_latino', v)}
+              options={['Yes', 'No', 'Decline To Self Identify']} />
             <SelectField label="Veteran Status" value={form.application_answers.veteran_status}
               onChange={v => updateAnswer('veteran_status', v)}
-              options={['I am a veteran', 'I am not a veteran', 'Prefer not to say']} />
+              options={['I am not a protected veteran', 'I am a protected veteran', 'Decline to Self Identify']} />
+          </div>
+          <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
             <SelectField label="Disability Status" value={form.application_answers.disability_status}
               onChange={v => updateAnswer('disability_status', v)}
-              options={['Yes, I have a disability', 'No, I do not have a disability', 'Prefer not to say']} />
+              options={['No, I do not have a disability and have not had one in the past', 'Yes, I have a disability, or have had one in the past', 'I do not want to answer']} />
+            <SelectField label="LGBTQ+?" value={form.application_answers.lgbtq}
+              onChange={v => updateAnswer('lgbtq', v)}
+              options={['Decline to state', 'Yes', 'No']} />
+          </div>
+          <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+            <SelectField label="Sexual Orientation" value={form.application_answers.sexual_orientation}
+              onChange={v => updateAnswer('sexual_orientation', v)}
+              options={['Decline to state', 'Heterosexual', 'Gay or Lesbian', 'Bisexual', 'Other']} />
           </div>
           <SelectField label="Do you require any accommodations?" value={form.application_answers.requires_accommodation}
             onChange={v => updateAnswer('requires_accommodation', v)} options={['Yes', 'No']} />
