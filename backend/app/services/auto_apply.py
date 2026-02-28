@@ -250,7 +250,7 @@ def _run_playwright_apply(job_url: str, profile_data: dict, resume_path: str, dr
     return {"screenshot_path": screenshot_path}
 
 
-async def apply_to_job(db: AsyncSession, job: JobListing) -> ApplicationLog:
+async def apply_to_job(db: AsyncSession, job: JobListing, dry_run: bool = False) -> ApplicationLog:
     """Apply to a single job using browser automation (runs Playwright in a thread)."""
     # Get profile
     result = await db.execute(select(UserProfile).limit(1))
@@ -271,34 +271,44 @@ async def apply_to_job(db: AsyncSession, job: JobListing) -> ApplicationLog:
     }
 
     app_log = ApplicationLog(job_id=job.id, status=ApplicationStatus.PENDING)
-    db.add(app_log)
 
     try:
         # Run Playwright in a separate thread to avoid Windows event loop issues
         loop = asyncio.get_event_loop()
         pw_result = await loop.run_in_executor(
             None,
-            partial(_run_playwright_apply, job.url, profile_data, resume_path, settings.dry_run),
+            partial(_run_playwright_apply, job.url, profile_data, resume_path, dry_run),
         )
 
-        app_log.status = ApplicationStatus.SUBMITTED
-        app_log.applied_at = datetime.utcnow()
         app_log.screenshot_path = pw_result.get("screenshot_path", "")
-        job.status = JobStatus.APPLIED
-        logger.info(f"{'[DRY RUN] ' if settings.dry_run else ''}Applied to job {job.id}: {job.title}")
+
+        if dry_run:
+            # Dry run: don't persist anything, don't change job status
+            app_log.status = ApplicationStatus.SUBMITTED
+            logger.info(f"[DRY RUN] Filled form for job {job.id}: {job.title}")
+        else:
+            # Live run: persist the log and update job status
+            app_log.status = ApplicationStatus.SUBMITTED
+            app_log.applied_at = datetime.utcnow()
+            db.add(app_log)
+            job.status = JobStatus.APPLIED
+            await db.commit()
+            logger.info(f"Applied to job {job.id}: {job.title}")
 
     except Exception as e:
         app_log.status = ApplicationStatus.FAILED
         app_log.error_message = str(e)
-        job.status = JobStatus.FAILED
+        if not dry_run:
+            db.add(app_log)
+            job.status = JobStatus.FAILED
+            await db.commit()
         logger.error(f"Failed to apply to job {job.id}: {e}")
 
-    await db.commit()
     return app_log
 
 
 async def apply_to_all_jobs(
-    db: AsyncSession, max_applications: int | None = None
+    db: AsyncSession, max_applications: int | None = None, dry_run: bool = False
 ) -> tuple[int, int, int]:
     """Apply to all eligible jobs (NEW or MATCHED, not already APPLIED/FAILED).
     Returns (submitted, failed, skipped) counts."""
@@ -319,7 +329,7 @@ async def apply_to_all_jobs(
     submitted = 0
     failed = 0
     for job in jobs:
-        log = await apply_to_job(db, job)
+        log = await apply_to_job(db, job, dry_run=dry_run)
         if log.status == ApplicationStatus.SUBMITTED:
             submitted += 1
         else:

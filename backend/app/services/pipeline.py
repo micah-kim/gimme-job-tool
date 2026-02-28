@@ -32,7 +32,7 @@ async def run_pipeline(
 
         # Step 2: Apply to all eligible jobs (skips APPLIED/FAILED)
         logger.info("Pipeline step 2/2: Applying to jobs...")
-        submitted, failed, skipped = await apply_to_all_jobs(db, max_applications)
+        submitted, failed, skipped = await apply_to_all_jobs(db, max_applications, dry_run=settings.dry_run)
         result.applications_submitted = submitted
         result.applications_failed = failed
         result.applications_skipped = skipped
