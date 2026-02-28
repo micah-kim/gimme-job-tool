@@ -136,12 +136,12 @@ async def fetch_lever_jobs(client: httpx.AsyncClient, token: str) -> list[dict]:
     return results
 
 
-async def _get_filter_criteria(db: AsyncSession) -> tuple[list[str], list[str], list[str]]:
-    """Load target titles, excluded titles, and locations from user profile preferences (all lowercased)."""
+async def _get_filter_criteria(db: AsyncSession) -> tuple[list[str], list[str]]:
+    """Load target titles and excluded titles from user profile preferences (all lowercased)."""
     result = await db.execute(select(UserProfile).limit(1))
     profile = result.scalar_one_or_none()
     if not profile or not profile.preferences:
-        return [], [], []
+        return [], []
     try:
         prefs = json.loads(profile.preferences) if isinstance(profile.preferences, str) else profile.preferences
 
@@ -150,15 +150,48 @@ async def _get_filter_criteria(db: AsyncSession) -> tuple[list[str], list[str], 
                 return [t.strip().lower() for t in val.split(",") if t.strip()]
             return [t.lower() for t in (val or [])]
 
-        return _parse_list(prefs.get("titles", [])), _parse_list(prefs.get("excluded_titles", [])), _parse_list(prefs.get("locations", []))
+        return _parse_list(prefs.get("titles", [])), _parse_list(prefs.get("excluded_titles", []))
     except (json.JSONDecodeError, AttributeError):
-        return [], [], []
+        return [], []
 
 
-def _matches_filters(job_title: str, job_location: str, target_titles: list[str], excluded_titles: list[str], locations: list[str]) -> bool:
+# Non-US location indicators to filter out
+_NON_US_INDICATORS = [
+    "canada", "ontario", "british columbia", "toronto", "vancouver", "montreal", "quebec", "alberta", "calgary",
+    "united kingdom", "uk", "london", "england", "ireland", "dublin",
+    "germany", "berlin", "munich", "france", "paris", "netherlands", "amsterdam",
+    "spain", "madrid", "barcelona", "italy", "rome", "milan",
+    "australia", "sydney", "melbourne", "singapore", "japan", "tokyo",
+    "india", "bangalore", "bengaluru", "mumbai", "hyderabad", "gurugram", "gurgaon", "delhi", "pune", "chennai",
+    "china", "beijing", "shanghai", "brazil", "são paulo", "sao paulo",
+    "korea", "seoul", "israel", "tel aviv",
+    "mexico", "argentina", "buenos aires", "colombia", "bogota",
+    "sweden", "stockholm", "norway", "oslo", "denmark", "copenhagen", "finland", "helsinki",
+    "poland", "warsaw", "czech", "prague", "switzerland", "zurich",
+    "portugal", "lisbon", "austria", "vienna",
+]
+
+
+def _is_us_location(location: str) -> bool:
+    """Return True if the location appears to be in the US or is Remote (no specific non-US country)."""
+    if not location:
+        return True  # No location info, assume eligible
+    loc_lower = location.lower().strip()
+    # Explicit US indicators
+    if any(us in loc_lower for us in ["united states", "usa", "u.s.", "remote - usa", "remote, us"]):
+        return True
+    # "Remote" or "Anywhere" without a specific non-US country
+    if "remote" in loc_lower or "anywhere" in loc_lower:
+        return not any(non_us in loc_lower for non_us in _NON_US_INDICATORS)
+    # Check for non-US indicators
+    if any(non_us in loc_lower for non_us in _NON_US_INDICATORS):
+        return False
+    return True  # Default: keep if unclear
+
+
+def _matches_filters(job_title: str, job_location: str, target_titles: list[str], excluded_titles: list[str]) -> bool:
     """Check if a job passes all filters (case-insensitive)."""
     job_lower = job_title.lower()
-    loc_lower = (job_location or "").lower()
 
     # Must match at least one target title (if any configured)
     if target_titles and not any(target in job_lower for target in target_titles):
@@ -168,8 +201,8 @@ def _matches_filters(job_title: str, job_location: str, target_titles: list[str]
     if excluded_titles and any(excl in job_lower for excl in excluded_titles):
         return False
 
-    # Must match at least one location (if any configured)
-    if locations and not any(loc in loc_lower for loc in locations):
+    # Must be a US-based location
+    if not _is_us_location(job_location):
         return False
 
     return True
@@ -195,17 +228,15 @@ async def fetch_jobs_for_company(db: AsyncSession, company: Company) -> int:
     existing_ids = {row[0] for row in result.fetchall()}
 
     # Load filter criteria from profile
-    target_titles, excluded_titles, locations = await _get_filter_criteria(db)
+    target_titles, excluded_titles = await _get_filter_criteria(db)
 
     new_count = 0
     skipped = 0
     for job_data in raw_jobs:
         if job_data["external_id"] in existing_ids:
             continue
-        if not _matches_filters(job_data["title"], job_data["location"], target_titles, excluded_titles, locations):
+        if not _matches_filters(job_data["title"], job_data["location"], target_titles, excluded_titles):
             skipped += 1
-            continue
-        if job_data["external_id"] in existing_ids:
             continue
         listing = JobListing(
             company_id=company.id,
